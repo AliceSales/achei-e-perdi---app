@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "356055688781",
+    "project_id": "achei-e-perdi--app",
+    "storage_bucket": "achei-e-perdi--app.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:356055688781:android:36810c392f1865b9c31e04",
+        "android_client_info": {
+          "package_name": "com.example.topicos.food"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC79y91-MNvz3mK4k1ZbBC--6JMr62ecOc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

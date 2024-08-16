@@ -45,6 +45,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.topicos.food.ui.theme.FoodTheme
 import com.example.topicos.food.R.color
+import com.google.firebase.Firebase
+import com.google.firebase.options
 import kotlinx.coroutines.launch
 
 // Definindo a família de fontes Inter
@@ -83,6 +85,7 @@ fun FoodTheme(content: @Composable () -> Unit) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Firebase
         setContent {
             FoodTheme {
                 val navController = rememberNavController()
