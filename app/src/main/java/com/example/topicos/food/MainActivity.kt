@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -58,6 +59,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.topicos.food.ui.theme.FoodTheme
 import com.example.topicos.food.R.color
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.options
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -65,6 +69,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.launch
+import java.sql.Date
 
 // Definindo a família de fontes Inter
 val InterFontFamily = FontFamily(
@@ -111,6 +116,7 @@ fun FoodTheme(content: @Composable () -> Unit) {
 }
 
 class MainActivity : ComponentActivity() {
+    private val db = FirebaseFirestore.getInstance()
     private lateinit var googleSignInClient: GoogleSignInClient
     private val RC_SIGN_IN = 9001
 
@@ -129,6 +135,63 @@ class MainActivity : ComponentActivity() {
                 NavGraph(navController = navController, onSignInClicked = { signIn() })
             }
         }
+    }
+    fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: Date){
+
+        val userMap = hashMapOf(
+            "Nome" to NomeCompleto,
+            "Email" to Email,
+            "Celular" to Celular,
+            "CPF" to Cpf,
+            "DataCriacao" to Data
+        )
+        db.collection("users").document(Cpf)
+            .set(userMap).addOnCompleteListener {
+                Log.d("DB", "A inserção de usuario " + Cpf + " foi bem sucedida")
+            }.addOnFailureListener{
+                Log.d("DB", "A inserção de usuario " + Cpf + " foi mal sucedida")
+            }
+    }
+
+    fun RegisterObjPerdido(id: String, NomeObj: String, Tag: String, Descricao: String, Data: Date,
+                           Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+
+        val userMap = hashMapOf(
+            "NomeObj" to NomeObj,
+            "Tag" to Tag,
+            "Descricao" to Descricao,
+            "Data" to Data,
+            "Mensagem" to Mensagem,
+            "Celular" to ContatoCelular,
+            "Email" to ContatoEmail,
+            "Encontrado" to Encontrado
+        )
+        db.collection("ObjetosPerdidos").document(id)
+            .set(userMap).addOnCompleteListener {
+                Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
+            }.addOnFailureListener{
+                Log.d("DB", "A inserção de Obj Perdido " + id + " foi mal sucedida")
+            }
+    }
+    fun RegisterObjEncontrado(id: String, NomeObj: String, Tag: String, Descricao: String, Data: Date,
+                              Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+
+        val userMap = hashMapOf(
+            "NomeObj" to NomeObj,
+            "Tag" to Tag,
+            "Descricao" to Descricao,
+            "Data" to Data,
+            "Mensagem" to Mensagem,
+            "Celular" to ContatoCelular,
+            "Email" to ContatoEmail,
+            "Encontrado" to Encontrado
+        )
+        db.collection("ObjetosPerdidos").document(id)
+            .set(userMap).addOnCompleteListener {
+                Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
+            }.addOnFailureListener{
+                Log.d("DB", "A inserção de Obj Perdido " + id + " foi mal sucedida")
+            }
     }
 
     private fun signIn() {
