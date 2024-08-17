@@ -3,6 +3,7 @@ package com.example.topicos.food
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import kotlin.random.Random
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -59,15 +60,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.topicos.food.ui.theme.FoodTheme
 import com.example.topicos.food.R.color
+import com.google.android.gms.tasks.Task
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.options
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.launch
 import java.sql.Date
 
@@ -116,115 +118,230 @@ fun FoodTheme(content: @Composable () -> Unit) {
 }
 
 class MainActivity : ComponentActivity() {
-    private val db = FirebaseFirestore.getInstance()
-    private lateinit var googleSignInClient: GoogleSignInClient
-    private val RC_SIGN_IN = 9001
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .build()
-
-        googleSignInClient = GoogleSignIn.getClient(this, gso)
-
         setContent {
             FoodTheme {
                 val navController = rememberNavController()
-                NavGraph(navController = navController, onSignInClicked = { signIn() })
+                NavGraph(navController = navController)
             }
         }
     }
-    fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: Date){
+}
+fun generateRandomString(): String {
+    val chars = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+    return (1..128)
+        .map { chars.random() }
+        .joinToString("")
+}
 
-        val userMap = hashMapOf(
-            "Nome" to NomeCompleto,
-            "Email" to Email,
-            "Celular" to Celular,
-            "CPF" to Cpf,
-            "DataCriacao" to Data
-        )
-        db.collection("users").document(Cpf)
-            .set(userMap).addOnCompleteListener {
-                Log.d("DB", "A inserção de usuario " + Cpf + " foi bem sucedida")
-            }.addOnFailureListener{
-                Log.d("DB", "A inserção de usuario " + Cpf + " foi mal sucedida")
-            }
-    }
-
-    fun RegisterObjPerdido(id: String, NomeObj: String, Tag: String, Descricao: String, Data: Date,
-                           Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
-
-        val userMap = hashMapOf(
-            "NomeObj" to NomeObj,
-            "Tag" to Tag,
-            "Descricao" to Descricao,
-            "Data" to Data,
-            "Mensagem" to Mensagem,
-            "Celular" to ContatoCelular,
-            "Email" to ContatoEmail,
-            "Encontrado" to Encontrado
-        )
-        db.collection("ObjetosPerdidos").document(id)
-            .set(userMap).addOnCompleteListener {
-                Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
-            }.addOnFailureListener{
-                Log.d("DB", "A inserção de Obj Perdido " + id + " foi mal sucedida")
-            }
-    }
-    fun RegisterObjEncontrado(id: String, NomeObj: String, Tag: String, Descricao: String, Data: Date,
-                              Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
-
-        val userMap = hashMapOf(
-            "NomeObj" to NomeObj,
-            "Tag" to Tag,
-            "Descricao" to Descricao,
-            "Data" to Data,
-            "Mensagem" to Mensagem,
-            "Celular" to ContatoCelular,
-            "Email" to ContatoEmail,
-            "Encontrado" to Encontrado
-        )
-        db.collection("ObjetosPerdidos").document(id)
-            .set(userMap).addOnCompleteListener {
-                Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
-            }.addOnFailureListener{
-                Log.d("DB", "A inserção de Obj Perdido " + id + " foi mal sucedida")
-            }
-    }
-
-    private fun signIn() {
-        val signInIntent = googleSignInClient.signInIntent
-        startActivityForResult(signInIntent, RC_SIGN_IN)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode == RC_SIGN_IN) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            handleSignInResult(task)
+fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: String){
+    val db = FirebaseFirestore.getInstance()
+    val userMap = hashMapOf(
+        "Nome" to NomeCompleto,
+        "Email" to Email,
+        "Celular" to Celular,
+        "CPF" to Cpf,
+        "DataCriacao" to Data
+    )
+    db.collection("users").document(Cpf)
+        .set(userMap).addOnCompleteListener {
+            Log.d("DB", "A inserção de usuario " + Cpf + " foi bem sucedida")
+        }.addOnFailureListener{
+            Log.d("DB", "A inserção de usuario " + Cpf + " falhou")
         }
-    }
+}
 
-    private fun handleSignInResult(completedTask: Task<GoogleSignInAccount>) {
-        try {
-            val account = completedTask.getResult(ApiException::class.java)
-            // Se o login for bem-sucedido, você obteremos os detalhes do usuário aqui.
-            val email = account?.email
-            // Agora, o user pode navegar para a tela "home"
-        } catch (e: ApiException) {
-            // Lida com falhas no login
+fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: String,
+                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+    val db = FirebaseFirestore.getInstance()
+    val id = generateRandomString()
+    val ObjMap = hashMapOf(
+        "NomeObj" to NomeObj,
+        "Tag" to Tag,
+        "Descricao" to Descricao,
+        "Data" to Data,
+        "Mensagem" to Mensagem,
+        "Celular" to ContatoCelular,
+        "Email" to ContatoEmail,
+        "Encontrado" to Encontrado,
+        "Colection" to "Perdidos"
+
+    )
+    db.collection("Perdidos").document(id)
+        .set(ObjMap).addOnCompleteListener {
+            Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
+        }.addOnFailureListener{
+            Log.d("DB", "A inserção de Obj Perdido " + id + " falhou")
         }
+}
+
+fun getObjPerdido(id:String, Colection : String): ArrayList<Any> {
+    val db = FirebaseFirestore.getInstance()
+    var objtPerdidoList = ArrayList<Any>()
+    val objts = db.collection(Colection).document(id)
+        .get().addOnCompleteListener {
+            Log.d("GET", "O GET  foi bem sucedido")
+        }.addOnFailureListener{
+            Log.d("GET", "O GET  falhou")
+        }.addOnSuccessListener { obj ->
+            val objPerdidoMap = hashMapOf(
+                "NomeObj" to obj.getString("NomeObj"),
+                "Tag" to obj.getString("Tag"),
+                "Descricao" to obj.getString("Descricao"),
+                "Data" to obj.getString("Data"),
+                "id" to obj.getString("id"),
+                "Mensagem" to obj.getString("Mensagem"),
+                "ContatoCelular" to obj.getString("Celular"),
+                "ContatoEmail" to obj.getString("Email"),
+                "Colection" to obj.getString("Colection"),
+                "Encontrado" to obj.getBoolean("Encontrado"),
+            )
+            objtPerdidoList.add(objPerdidoMap)
+        }
+    return objtPerdidoList
+}
+
+fun RegisterObjEncontrado(NomeObj: String, Tag: String, Descricao: String, Data: Date,
+                          Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+    val db = FirebaseFirestore.getInstance()
+    val id = generateRandomString()
+    val ObjMap = hashMapOf(
+        "NomeObj" to NomeObj,
+        "Tag" to Tag,
+        "Descricao" to Descricao,
+        "Data" to Data,
+        "Mensagem" to Mensagem,
+        "Celular" to ContatoCelular,
+        "Email" to ContatoEmail,
+        "Colection" to "Encontrados",
+        "Encontrado" to Encontrado
+    )
+    db.collection("Encontrados").document(id)
+        .set(ObjMap).addOnCompleteListener {
+            Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
+        }.addOnFailureListener{
+            Log.d("DB", "A inserção de Obj Perdido " + id + " falhou")
+        }
+}
+
+fun GetObjPerdidos(): ArrayList<Any> {
+    val db = FirebaseFirestore.getInstance()
+    var objts = ArrayList<Any>()
+    val ObjPerdidos = db.collection("Perdidos")
+        .get().addOnCompleteListener {
+            Log.d("GET", "O GET em Perdidos foi bem sucedido")
+        }.addOnFailureListener {
+            Log.d("OBJPERDIDO", "Erro ao obter os objetos perdidos")
+        }.addOnCanceledListener{
+            Log.d("GET", "O GET em Perdidos falhou")
+        }.addOnSuccessListener { result ->
+            for (obj in result) {
+                val objPerdidoMap = hashMapOf(
+                    "NomeObj" to obj.getString("NomeObj"),
+                    "Tag" to obj.getString("Tag"),
+                    "Descricao" to obj.getString("Descricao"),
+                    "Data" to obj.getString("Data"),
+                    "id" to obj.getString("id"),
+                    "Mensagem" to obj.getString("Mensagem"),
+                    "ContatoCelular" to obj.getString("Celular"),
+                    "ContatoEmail" to obj.getString("Email"),
+                    "Colection" to obj.getString("Colection"),
+                    "Encontrado" to obj.getBoolean("Encontrado"),
+                )
+                objts.add(objPerdidoMap)
+                Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
+            }
+        }
+    return objts
+}
+
+fun GetObjEncontrados(): ArrayList<Any> {
+    val db = FirebaseFirestore.getInstance()
+    var objts = ArrayList<Any>()
+    val ObjEncontrados = db.collection("Encontrados")
+        .get().addOnCompleteListener {
+            Log.d("GET", "O GET em Encontrados foi bem sucedido")
+        }.addOnFailureListener{
+            Log.d("GET", "O GET em Encontrados falhou")
+        }.addOnSuccessListener { result ->
+            for (obj in result) {
+                val objPerdidoMap = hashMapOf(
+                    "NomeObj" to obj.getString("NomeObj"),
+                    "Tag" to obj.getString("Tag"),
+                    "Descricao" to obj.getString("Descricao"),
+                    "Data" to obj.getString("Data"),
+                    "id" to obj.getString("id"),
+                    "Mensagem" to obj.getString("Mensagem"),
+                    "ContatoCelular" to obj.getString("Celular"),
+                    "ContatoEmail" to obj.getString("Email"),
+                    "Colection" to obj.getString("Colection"),
+                    "Encontrado" to obj.getBoolean("Encontrado"),
+                )
+                objts.add(objPerdidoMap)
+                Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
+            }
+        }
+    return objts
+}
+
+fun GetUsers(): ArrayList<Any> {
+    val db = FirebaseFirestore.getInstance()
+    var objts = ArrayList<Any>()
+    val Users = db.collection("Users")
+        .get().addOnCompleteListener {
+        Log.d("GET", "O GET em Users foi bem sucedido")
+        }.addOnFailureListener{
+            Log.d("GET", "O GET em Users falhou")
+        }.addOnSuccessListener { result ->
+            for (obj in result) {
+                val objPerdidoMap = hashMapOf(
+                    "Nome" to obj.getString("NomeCompleto"),
+                    "Email" to obj.getString("Email"),
+                    "Celular" to obj.getString("Celular"),
+                    "CPF" to obj.getString("Cpf"),
+                    "DataCriacao" to obj.getString("Data")
+                )
+                objts.add(objPerdidoMap)
+                Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
+            }
+        }
+    return objts
+}
+
+fun DeleteObjPerdido(id: String){
+    val db = FirebaseFirestore.getInstance()
+    db.collection("Perdidos").document(id).delete().addOnCompleteListener {
+        Log.d("DELETE", "O DELETE em Perdidos foi bem sucedido")
+    }.addOnFailureListener{
+        Log.d("DELETE", "O DELETE em Perdidos falhou")
+    }
+}
+
+fun DeleteObjEncontrado(id: String){
+    val db = FirebaseFirestore.getInstance()
+    db.collection("Encontrados").document(id).delete().addOnCompleteListener {
+            Log.d("DELETE", "O DELETE em Encontrados foi bem sucedido")
+    }.addOnFailureListener{
+        Log.d("DELETE", "O DELETE em Encontrados falhou")
+    }
+}
+
+fun UpdateObjStatus(id: String, Encontrado: Boolean){
+    val db = FirebaseFirestore.getInstance()
+    db.collection("Perdidos").document(id).update("Encontrado", Encontrado).addOnCompleteListener {
+        Log.d("UPDATE", "O UPDATE em Perdidos foi bem sucedido")
+    }.addOnFailureListener{
+        Log.d("UPDATE", "O UPDATE em Perdidos falhou")
     }
 }
 
 @Composable
-fun NavGraph(navController: NavHostController, onSignInClicked: () -> Unit) {
-    NavHost(navController = navController, startDestination = "home") {
+fun NavGraph(navController: NavHostController) {
+    NavHost(navController = navController, startDestination = "onboarding") {
         composable("onboarding") {
-            OnboardingScreen(navController, onSignInClicked)
+            OnboardingScreen(navController)
         }
         composable("home") {
             App(navController)
@@ -241,8 +358,7 @@ fun NavGraph(navController: NavHostController, onSignInClicked: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun OnboardingScreen(navController: NavHostController, onSignInClicked: () -> Unit) {
-    val context = LocalContext.current
+fun OnboardingScreen(navController: NavHostController) {
     val scope = rememberCoroutineScope()
     val images = listOf(
         R.drawable.tip_image_1,
@@ -316,7 +432,7 @@ fun OnboardingScreen(navController: NavHostController, onSignInClicked: () -> Un
                 } else {
                     Button(
                         onClick = {
-                            onSignInClicked()
+                            navController.navigate("home")
                         },
                         colors = ButtonDefaults.buttonColors(Color(0xFF049EFE)),
                     ) {
