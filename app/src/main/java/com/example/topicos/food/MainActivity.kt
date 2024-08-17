@@ -1,5 +1,8 @@
 package com.example.topicos.food
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -15,11 +19,16 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
@@ -31,20 +40,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.modifier.modifierLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.topicos.food.ui.theme.FoodTheme
 import com.example.topicos.food.R.color
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.launch
 
 // Definindo a família de fontes Inter
@@ -52,6 +71,17 @@ val InterFontFamily = FontFamily(
     Font(R.font.inter_regular, FontWeight.Normal),
     Font(R.font.inter_bold, FontWeight.Bold)
 )
+
+// Para abrir o serviço de emails
+fun openEmailService(context: Context, email: String, subject: String = "", body: String = "") {
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:$email")
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+    context.startActivity(Intent.createChooser(intent, "Escolha o app de e-mail"))
+}
+
 
 @Composable
 fun FoodTheme(content: @Composable () -> Unit) {
@@ -81,36 +111,75 @@ fun FoodTheme(content: @Composable () -> Unit) {
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private val RC_SIGN_IN = 9001
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .build()
+
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
+
         setContent {
             FoodTheme {
                 val navController = rememberNavController()
-                NavGraph(navController = navController)
+                NavGraph(navController = navController, onSignInClicked = { signIn() })
             }
+        }
+    }
+
+    private fun signIn() {
+        val signInIntent = googleSignInClient.signInIntent
+        startActivityForResult(signInIntent, RC_SIGN_IN)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == RC_SIGN_IN) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            handleSignInResult(task)
+        }
+    }
+
+    private fun handleSignInResult(completedTask: Task<GoogleSignInAccount>) {
+        try {
+            val account = completedTask.getResult(ApiException::class.java)
+            // Se o login for bem-sucedido, você obteremos os detalhes do usuário aqui.
+            val email = account?.email
+            // Agora, o user pode navegar para a tela "home"
+        } catch (e: ApiException) {
+            // Lida com falhas no login
         }
     }
 }
 
 @Composable
-fun NavGraph(navController: NavHostController) {
-    NavHost(navController = navController, startDestination = "onboarding") {
+fun NavGraph(navController: NavHostController, onSignInClicked: () -> Unit) {
+    NavHost(navController = navController, startDestination = "home") {
         composable("onboarding") {
-            OnboardingScreen(navController)
+            OnboardingScreen(navController, onSignInClicked)
         }
         composable("home") {
             App(navController)
         }
         composable("details/{item}") { backStackEntry ->
             val item = backStackEntry.arguments?.getString("item")
-            Details(item = item ?: "")
+            Details(item = item ?: "", navController)
+        }
+        composable("cadastro-item-encontrado") {
+            CadastroObjetosEncontrados(navController = navController)
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun OnboardingScreen(navController: NavHostController) {
+fun OnboardingScreen(navController: NavHostController, onSignInClicked: () -> Unit) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val images = listOf(
         R.drawable.tip_image_1,
@@ -184,7 +253,7 @@ fun OnboardingScreen(navController: NavHostController) {
                 } else {
                     Button(
                         onClick = {
-                            navController.navigate("home")
+                            onSignInClicked()
                         },
                         colors = ButtonDefaults.buttonColors(Color(0xFF049EFE)),
                     ) {
@@ -255,20 +324,16 @@ fun OnboardingPage(
 @Composable
 fun App(navController: NavHostController) {
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0XFFFFFF)),
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.background),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
             SectionHeaderUser(text = "Achei e perdi")
             Spacer(modifier = Modifier.height(16.dp))
-            DeliveryProfile()
+            InstructionHeader(navController = navController)
             Spacer(modifier = Modifier.height(16.dp))
             FiltrosSection()
             Spacer(modifier = Modifier.height(16.dp))
@@ -278,32 +343,174 @@ fun App(navController: NavHostController) {
 }
 
 @Composable
-fun Details(item: String) {
-    Column(
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize()
+fun CustomIconButton(
+    colorBackground: Color,
+    colorIcon: Color,
+    navController: NavController
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(colorBackground)
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.delivery),
-            contentDescription = "Profile Picture",
-            modifier = Modifier
-                .size(250.dp)
-                .clip(RectangleShape),
-            contentScale = ContentScale.Crop
-        )
-        Column {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.Start,
-            ) {
-                Text(text = "NOME DO ITEM")
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(text = "Item encontrado por Ana Luiza")
+        IconButton(
+            onClick = {
+                navController.navigate("home")
             }
-            Row {
-                Text(text = "DESCRIÇÔSAD  FDKNF AMFDKAN JDSFNDAJO DSADOJDAN SNDJSANDAK JNFDKJDSNAK JNFKDNKDSA JKDNFJDFK JDKNFKDS")
+        ) {
+            Icon(
+                Icons.Filled.KeyboardArrowLeft,
+                contentDescription = "Back to home Icon",
+                tint = colorIcon
+            )
+        }
+    }
+}
+
+@Composable
+fun Details(item: String, navController: NavHostController) {
+    val context = LocalContext.current
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0XFFFFFF))
+    ) {
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(75.dp)
+                    .background(Color(0XFF049EFE))
+                    .padding(16.dp, 0.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CustomIconButton(
+                    colorBackground = Color.White,
+                    colorIcon = Color(0XFF049EFE),
+                    navController = navController
+                )
+            }
+        }
+        item {
+            Image(
+                painter = painterResource(id = R.drawable.sushi),
+                contentDescription = "Profile Picture",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(360.dp),
+                contentScale = ContentScale.Crop
+            )
+        }
+        item {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    text = "NOME DO ITEM",
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp),
+                    fontFamily = InterFontFamily
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(2f)) {
+                        Text(
+                            text = "encontrado no:",
+                            style = TextStyle(fontWeight = FontWeight.Bold),
+                            fontFamily = InterFontFamily
+                        )
+                        Text(
+                            text = "CAC - centro de artes e comunicação",
+                            modifier = Modifier.fillMaxWidth(),
+                            fontFamily = InterFontFamily
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "data:",
+                            style = TextStyle(fontWeight = FontWeight.Bold),
+                            fontFamily = InterFontFamily
+                        )
+                        Text(
+                            text = "22/05/2024",
+                            modifier = Modifier.fillMaxWidth(),
+                            fontFamily = InterFontFamily
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(25.dp))
+                Text(
+                    text = "DESCRIÇÃO: FDKNF AMFDKAN JDSFNDAJO DSADOJDAN SNDJSANDAK JNFDKJDSNAK JNFKDNKDSA JKDNFJDFK JDKNFKDS",
+                    fontFamily = InterFontFamily
+                )
+                Spacer(modifier = Modifier.height(25.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(2f)) {
+                        Text(
+                            text = "categoria:",
+                            style = TextStyle(fontWeight = FontWeight.Bold),
+                            fontFamily = InterFontFamily
+                        )
+                        Text(
+                            text = "comidinha",
+                            modifier = Modifier.fillMaxWidth(),
+                            fontFamily = InterFontFamily
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "tipo anúncio:",
+                            style = TextStyle(fontWeight = FontWeight.Bold),
+                            fontFamily = InterFontFamily
+                        )
+                        Text(
+                            text = "objeto perdido",
+                            modifier = Modifier.fillMaxWidth(),
+                            fontFamily = InterFontFamily
+                        )
+                    }
+                }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.delivery),
+                        contentDescription = "Profile User",
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .border(color = Color(0XFF049EFE), width = 2.dp, shape = CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Text(
+                        text = "NOME DA PESSOA",
+                        Modifier.padding(start = 10.dp),
+                        fontFamily = InterFontFamily
+                    )
+                }
+                Button(
+                    onClick = {
+                        openEmailService(
+                            context = context,
+                            email = "example@ufpe.br",
+                            subject = "Assunto",
+                            body = "Corpo da mensagem"
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    colors = ButtonDefaults.buttonColors(Color(0xFF049EFE))
+                ) {
+                    Text(
+                        text = "Enviar e-mail",
+                        style = TextStyle(
+                            color = Color(0XFFFFFFFF),
+                            fontFamily = InterFontFamily
+                        )
+                    )
+                }
             }
         }
     }
@@ -350,7 +557,7 @@ fun SectionHeader(text: String) {
 }
 
 @Composable
-fun DeliveryProfile() {
+fun InstructionHeader(navController: NavHostController) {
     Card(
         modifier = Modifier
             .fillMaxWidth(),
@@ -372,7 +579,7 @@ fun DeliveryProfile() {
                 fontFamily = InterFontFamily
             )
             Button(
-                onClick = {},
+                onClick = {navController.navigate("cadastro-item-encontrado")},
                 modifier = Modifier.align(Alignment.End),
                 colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
             ) {
@@ -404,7 +611,6 @@ fun FiltrosSection() {
     }
 }
 
-// Supondo que você tenha uma lista de categorias com nomes e recursos de imagem
 val categoryList = listOf(
     Category("Carregadores", R.drawable.carregador),
     Category("Chaves", R.drawable.chaves),
@@ -519,14 +725,116 @@ fun CardObjeto(item: String, imageRes: Int, navController: NavHostController) {
             Text(
                 text = item,
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.Black
+                color = Color.Black,
+                fontFamily = InterFontFamily
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Lorem ipsum is a placeholder text commonly used",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = Color.Gray,
+                fontFamily = InterFontFamily
             )
+        }
+    }
+}
+
+@Composable
+fun CadastroObjetosEncontrados(navController: NavHostController) {
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .background(Color(0XFFFFFF))) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
+            item {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(75.dp)
+                        .background(Color(0XFF049EFE))
+                        .padding(16.dp, 0.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CustomIconButton(
+                        colorBackground = Color.White,
+                        colorIcon = Color(0XFF049EFE),
+                        navController = navController
+                    )
+                }
+            }
+            item {
+                Column(modifier = Modifier.padding(25.dp)) {
+                    Text(text = "Cadastrar objeto encontrado",
+                        style = TextStyle(
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp
+                        ))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Image(
+                        painter = painterResource(id = R.drawable.default_image),
+                        contentDescription = "Cadastro do objeto encontrado",
+                        modifier = Modifier
+                            .height(200.dp)
+                            .fillMaxWidth(),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column {
+                        OutlinedTextField(
+                            value = "", // Estado do input
+                            onValueChange = {}, // Lógica de atualização do estado
+                            label = { Text("Digite o nome do objeto") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = "",
+                            onValueChange = {},
+                            label = { Text("Digite a descrição") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = "",
+                            onValueChange = {},
+                            label = { Text("Digite o local") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = "",
+                            onValueChange = {},
+                            label = { Text("Selecione a categoria") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row {
+                        Button(
+                            onClick = {},
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            colors = ButtonDefaults.buttonColors(Color(0xFF049EFE))
+                        ) {
+                            Text(
+                                text = "Cadastrar objeto encontrado",
+                                style = TextStyle(
+                                    color = Color(0XFFFFFFFF),
+                                    fontFamily = InterFontFamily
+                                )
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
