@@ -32,6 +32,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
@@ -57,9 +59,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.topicos.food.ui.theme.FoodTheme
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
@@ -172,6 +176,7 @@ fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: St
 }
 
 suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
+    Log.d("OBJGET", "O GET começou o id é $collection")
     val db = FirebaseFirestore.getInstance()
     return try {
         val documentSnapshot = db.collection(collection).document(id).get().await()
@@ -218,41 +223,45 @@ fun RegisterObjEncontrado(
     )
     db.collection("Encontrados").document(id)
         .set(ObjMap).addOnCompleteListener {
-            Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
+            Log.d("DB", "A inserção de Obj encontrado " + id + " foi bem sucedida")
         }.addOnFailureListener{
-            Log.d("DB", "A inserção de Obj Perdido " + id + " falhou")
+            Log.d("DB", "A inserção de Obj encontrado " + id + " falhou")
         }
 }
 
-fun GetObjPerdidos(): ArrayList<Any> {
+fun GetObjPerdidos(onResult: (List<Map<String, Any?>>) -> Unit) {
     val db = FirebaseFirestore.getInstance()
-    var objts = ArrayList<Any>()
-    val ObjPerdidos = db.collection("Perdidos")
-        .get().addOnCompleteListener {
-            Log.d("GET", "O GET em Perdidos foi bem sucedido")
-        }.addOnFailureListener {
-            Log.d("OBJPERDIDO", "Erro ao obter os objetos perdidos")
-        }.addOnCanceledListener{
-            Log.d("GET", "O GET em Perdidos falhou")
-        }.addOnSuccessListener { result ->
-            for (obj in result) {
-                val objPerdidoMap = hashMapOf(
-                    "NomeObj" to obj.getString("NomeObj"),
-                    "Tag" to obj.getString("Tag"),
-                    "Descricao" to obj.getString("Descricao"),
-                    "Data" to obj.getString("Data"),
-                    "id" to obj.getString("id"),
-                    "Mensagem" to obj.getString("Mensagem"),
-                    "ContatoCelular" to obj.getString("Celular"),
-                    "ContatoEmail" to obj.getString("Email"),
-                    "Colection" to obj.getString("Colection"),
-                    "Encontrado" to obj.getBoolean("Encontrado"),
-                )
-                objts.add(objPerdidoMap)
-                Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
+    val objts = ArrayList<Map<String, Any?>>()
+
+    db.collection("Perdidos")
+        .get()
+        .addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val result = task.result
+                if (result != null) {
+                    for (obj in result) {
+                        val objPerdidoMap = hashMapOf(
+                            "NomeObj" to obj.getString("NomeObj"),
+                            "Tag" to obj.getString("Tag"),
+                            "Descricao" to obj.getString("Descricao"),
+                            "Data" to obj.getString("Data"),
+                            "id" to obj.getString("id"),
+                            "Mensagem" to obj.getString("Mensagem"),
+                            "ContatoCelular" to obj.getString("Celular"),
+                            "ContatoEmail" to obj.getString("Email"),
+                            "Colection" to obj.getString("Colection"),
+                            "Encontrado" to obj.getBoolean("Encontrado"),
+                        )
+                        objts.add(objPerdidoMap)
+                        Log.d("OBJPERDIDO", "nomeobj: ${obj.getString("NomeObj")}")
+                    }
+                }
+                onResult(objts)
+            } else {
+                Log.d("GET", "O GET em Perdidos falhou")
+                onResult(emptyList())
             }
         }
-    return objts
 }
 
 // Função para obter objetos encontrados do Firestore
@@ -349,22 +358,30 @@ fun NavGraph(navController: NavHostController) {
         composable("onboarding") {
             OnboardingScreen(navController)
         }
-        composable("home") {
-            App(navController)
+        composable(
+            route = "home/{tab}",
+            arguments = listOf(navArgument("tab") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val tab = backStackEntry.arguments?.getInt("tab") ?: 0
+            App(navController, tab = tab)
         }
-        composable("details/{item}") { backStackEntry ->
+        composable("details/{item}/{tab}") { backStackEntry ->
             val item = backStackEntry.arguments?.getString("item")
-            Details(item = item ?: "", navController)
+            val tabString = backStackEntry.arguments?.getString("tab")
+            val tab = tabString?.toIntOrNull() ?: 0
+            Details(item = item ?: "", navController = navController, tab = tab)
         }
-        composable("cadastro-item-encontrado") {
-            CadastroObjetosEncontrados(navController = navController)
+        composable("cadastro-item/{tab}") { backStackEntry ->
+            val tabString = backStackEntry.arguments?.getString("tab")
+            val tab = tabString?.toIntOrNull() ?: 0
+            CadastroObjetos(navController = navController, tab)
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun OnboardingScreen(navController: NavHostController) {
+fun OnboardingScreen(navController: NavHostController, tab: Int = 0) {
     val scope = rememberCoroutineScope()
     val images = listOf(
         R.drawable.tip_image_1,
@@ -377,9 +394,9 @@ fun OnboardingScreen(navController: NavHostController) {
         "Vem fazer parte dessa corrente do bem!",
     )
     val descriptions = listOf(
-        "Dentro do app você pode cadastrar e procurar seus pertences perdidos!",
-        "Dentro do app você pode cadastrar objetos encontrados dentro do campus!",
-        "Dentro do app você pode cadastrar objetos encontrados!"
+        "Dentro do app você pode cadastrar seus pertences perdidos para que outras pessoas possam ajudá-lo a encontrá-lo!",
+        "Dentro do app você pode cadastrar objetos encontrados dentro do campus para o dono entrar em contato e você poder devolvê-lo!",
+        ""
     )
 
     val backgrounds = listOf(
@@ -438,7 +455,7 @@ fun OnboardingScreen(navController: NavHostController) {
                 } else {
                     Button(
                         onClick = {
-                            navController.navigate("home")
+                            navController.navigate("home/$tab")
                         },
                         colors = ButtonDefaults.buttonColors(Color(0xFF049EFE)),
                     ) {
@@ -507,22 +524,69 @@ fun OnboardingPage(
 }
 
 @Composable
-fun App(navController: NavHostController) {
+fun App(navController: NavHostController, tab: Int) {
+    var selectedTab by remember { mutableStateOf(tab) } // Flag para controlar a aba selecionada
+    val tabs = listOf("Encontrados", "Perdidos")
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0XFFFFFF)),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            SectionHeaderUser(text = "Achei e perdi")
-            Spacer(modifier = Modifier.height(16.dp))
-            InstructionHeader(navController = navController)
-            Spacer(modifier = Modifier.height(16.dp))
-            FiltrosSection()
-            Spacer(modifier = Modifier.height(16.dp))
-            RecentsSection(navController = navController)
+            // Conteúdo principal da tela
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        SectionHeaderUser(text = "Achei e perdi")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        InstructionHeader(navController = navController, 0)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        FiltrosSection()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        RecentsSection(navController = navController, 0)
+                    }
+                    1 -> {
+                        SectionHeaderUser(text = "Achei e perdi")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        InstructionHeader(navController = navController, 1)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        FiltrosSection()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        RecentsSection(navController = navController, 1)
+                    }
+                }
+            }
+
+            // Barra de navegação das abas na parte inferior
+            TabRow(
+                selectedTabIndex = selectedTab,
+                contentColor = Color.Black,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .background(Color.White)
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = {
+                            selectedTab = index
+                            // Navegar para a aba selecionada
+                            navController.navigate("home/$index") {
+                                popUpTo("home/$index") { inclusive = true }
+                            }
+                        },
+                        text = { Text(title) }
+                    )
+                }
+            }
         }
     }
 }
@@ -531,7 +595,8 @@ fun App(navController: NavHostController) {
 fun CustomIconButton(
     colorBackground: Color,
     colorIcon: Color,
-    navController: NavController
+    navController: NavController,
+    tab: Int
 ) {
     Box(
         modifier = Modifier
@@ -541,7 +606,7 @@ fun CustomIconButton(
     ) {
         IconButton(
             onClick = {
-                navController.navigate("home")
+                navController.navigate("home/$tab")
             }
         ) {
             Icon(
@@ -554,21 +619,27 @@ fun CustomIconButton(
 }
 
 @Composable
-fun Details(item: String, navController: NavHostController) {
+fun Details(item: String, navController: NavHostController, tab: Int) {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var objeto by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
     // Verifique se o LaunchedEffect está sendo executado
+    val collection = if (tab == 0) "Encontrados" else "Perdidos"
     LaunchedEffect(item) {
-        objeto = GetObj(item, "Encontrados")
+        objeto = GetObj(item, collection)
         Log.d("OBJ2", objeto.toString())
         isLoading = false
     }
 
     if (isLoading) {
-        // Exibe uma tela de carregamento
-        CircularProgressIndicator(modifier = Modifier.fillMaxSize())
+        Column(
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().fillMaxHeight()
+        ) {
+            CircularProgressIndicator()
+        }
     } else {
         // Renderiza o conteúdo quando isLoading é false
         LazyColumn(
@@ -588,7 +659,8 @@ fun Details(item: String, navController: NavHostController) {
                     CustomIconButton(
                         colorBackground = Color.White,
                         colorIcon = Color(0XFF049EFE),
-                        navController = navController
+                        navController = navController,
+                        tab = tab
                     )
                 }
             }
@@ -616,12 +688,12 @@ fun Details(item: String, navController: NavHostController) {
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.weight(2f)) {
                                 Text(
-                                    text = "encontrado no:",
+                                    text = if (tab == 0) "encontrado no:" else "perdido perto do:",
                                     style = TextStyle(fontWeight = FontWeight.Bold),
                                     fontFamily = InterFontFamily
                                 )
                                 Text(
-                                    text = "CAC - centro de artes e comunicação",
+                                    text = obj["local"] as String? ?: "NOME DO ITEM",
                                     modifier = Modifier.fillMaxWidth(),
                                     fontFamily = InterFontFamily
                                 )
@@ -665,7 +737,7 @@ fun Details(item: String, navController: NavHostController) {
                                     fontFamily = InterFontFamily
                                 )
                                 Text(
-                                    text = "objeto perdido",
+                                    text = if (tab == 0) "objeto encontrado" else "objeto perdido",
                                     modifier = Modifier.fillMaxWidth(),
                                     fontFamily = InterFontFamily
                                 )
@@ -701,7 +773,7 @@ fun Details(item: String, navController: NavHostController) {
                                 openEmailService(
                                     context = context,
                                     email = obj["ContatoEmail"] as String? ?: "example@ufpe.br",
-                                    subject = "Assunto",
+                                    subject = if (tab == 0) "Você encontrou meu objeto, obrigada!" else "Encontrei o seu objeto, como posso te devolver?",
                                     body = "Corpo da mensagem"
                                 )
                             },
@@ -766,7 +838,7 @@ fun SectionHeader(text: String) {
 }
 
 @Composable
-fun InstructionHeader(navController: NavHostController) {
+fun InstructionHeader(navController: NavHostController, tab: Int) {
     Card(
         modifier = Modifier
             .fillMaxWidth(),
@@ -779,7 +851,7 @@ fun InstructionHeader(navController: NavHostController) {
                 .height(100.dp),
         ) {
             Text(
-                text = "Encontrei um objeto perdido pela UFPE e desejo entregar para o dono!",
+                text = if (tab==0) "Encontrei um objeto perdido pela UFPE e desejo entregar para o dono!" else "Perdi um objeto pela UFPE e desejo cadastrá-lo para as pessoas me ajudarem a encontrá-lo!",
                 style = TextStyle(
                     fontWeight = FontWeight.Bold,
                     color = Color(0XFFFFFFFF)
@@ -788,7 +860,9 @@ fun InstructionHeader(navController: NavHostController) {
                 fontFamily = InterFontFamily
             )
             Button(
-                onClick = {navController.navigate("cadastro-item-encontrado")},
+                onClick = {
+                    navController.navigate("cadastro-item/$tab")
+                },
                 modifier = Modifier.align(Alignment.End),
                 colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
             ) {
@@ -879,24 +953,37 @@ fun CategoryCard(imgCard: Int, category: String) {
 }
 
 @Composable
-fun RecentsSection(navController: NavHostController) {
+fun RecentsSection(navController: NavHostController, tab: Int) {
     // Estado para armazenar os itens encontrados
     val items = remember { mutableStateOf(emptyList<Map<String, Any?>>()) }
     val isLoading = remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        GetObjEncontrados { result ->
-            items.value = result
-            isLoading.value = false
+        if (tab == 0) {
+            GetObjEncontrados { result ->
+                items.value = result
+                isLoading.value = false
+            }
+        } else {
+            GetObjPerdidos { result ->
+                items.value = result
+                isLoading.value = false
+            }
         }
     }
 
     Column {
-        SectionHeader(text = "Objetos encontrados mais recentes")
+        SectionHeader(text = if (tab==0) "Objetos encontrados mais recentes" else "Objetos perdidos mais recentes")
         Spacer(modifier = Modifier.height(16.dp))
 
         if (isLoading.value) {
-            CircularProgressIndicator()
+            Column(
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().fillMaxHeight()
+            ) {
+                CircularProgressIndicator()
+            }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -904,9 +991,11 @@ fun RecentsSection(navController: NavHostController) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(items.value.size) { item ->
+                    Log.d("ATNNJ", tab.toString())
                     CardObjeto(
                         items.value[item].toString(),
-                        navController
+                        navController,
+                        tab = tab
                     )
                 }
             }
@@ -915,8 +1004,7 @@ fun RecentsSection(navController: NavHostController) {
 }
 
 @Composable
-fun CardObjeto(item: String, navController: NavHostController) {
-    Log.d("CARD", item)
+fun CardObjeto(item: String, navController: NavHostController, tab: Int) {
     val regex_id = """id=([^,}]+)""".toRegex()
     val regex_nome = """NomeObj=([^,}]+)""".toRegex()
     val regex_descricao = """Descricao=([^,}]+)""".toRegex()
@@ -929,7 +1017,7 @@ fun CardObjeto(item: String, navController: NavHostController) {
             .fillMaxWidth()
             .height(200.dp),
         onClick = {
-            navController.navigate("details/$id")
+            navController.navigate("details/$id/$tab")
         },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(Color.White)
@@ -975,7 +1063,7 @@ data class CadastroForm(
 )
 
 @Composable
-fun CadastroObjetosEncontrados(navController: NavHostController) {
+fun CadastroObjetos(navController: NavHostController, tab: Int) {
     val form = remember { mutableStateOf(CadastroForm()) }
 
     Box(modifier = Modifier
@@ -997,14 +1085,15 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                     CustomIconButton(
                         colorBackground = Color.White,
                         colorIcon = Color(0XFF049EFE),
-                        navController = navController
+                        navController = navController,
+                        tab = tab
                     )
                 }
             }
             item {
                 Column(modifier = Modifier.padding(25.dp)) {
                     Text(
-                        text = "Cadastrar objeto encontrado",
+                        text = if (tab == 0) "Cadastrar objeto encontrado $tab" else "Cadastrar objeto perdido",
                         style = TextStyle(
                             fontFamily = InterFontFamily,
                             fontWeight = FontWeight.ExtraBold,
@@ -1014,7 +1103,7 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                     Spacer(modifier = Modifier.height(20.dp))
                     Image(
                         painter = painterResource(id = R.drawable.default_image),
-                        contentDescription = "Cadastro do objeto encontrado",
+                        contentDescription = if (tab == 0) "Cadastro do objeto encontrado" else "Cadastro do objeto perdido",
                         modifier = Modifier
                             .height(200.dp)
                             .fillMaxWidth(),
@@ -1062,7 +1151,7 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                         OutlinedTextField(
                             value = form.value.data,
                             onValueChange = { form.value = form.value.copy(data = it) },
-                            label = { Text("Selecione a data que você encontrou o objeto") },
+                            label = { Text(if (tab == 0) "Selecione a data que você encontrou o objeto" else "Seleciona a data que você acredita ter perdido o objeto") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp)
                         )
@@ -1091,17 +1180,30 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                     Row {
                         Button(
                             onClick = {
-                                // Chama a função RegisterObjPerdido com os valores dos inputs
-                                RegisterObjEncontrado(
-                                    NomeObj = form.value.nomeObj,
-                                    Tag = form.value.categoria,
-                                    Descricao = form.value.descricao,
-                                    Data = form.value.data,
-                                    Mensagem = form.value.mensagem,
-                                    ContatoCelular = form.value.celular,
-                                    ContatoEmail = form.value.contatoEmail,
-                                    Encontrado = false
-                                )
+                                if (tab == 0) {
+                                    // Chama a função RegisterObjPerdido com os valores dos inputs
+                                    RegisterObjEncontrado(
+                                        NomeObj = form.value.nomeObj,
+                                        Tag = form.value.categoria,
+                                        Descricao = form.value.descricao,
+                                        Data = form.value.data,
+                                        Mensagem = form.value.mensagem,
+                                        ContatoCelular = form.value.celular,
+                                        ContatoEmail = form.value.contatoEmail,
+                                        Encontrado = false
+                                    )
+                                } else {
+                                    RegisterObjPerdido(
+                                        NomeObj = form.value.nomeObj,
+                                        Tag = form.value.categoria,
+                                        Descricao = form.value.descricao,
+                                        Data = form.value.data,
+                                        Mensagem = form.value.mensagem,
+                                        ContatoCelular = form.value.celular,
+                                        ContatoEmail = form.value.contatoEmail,
+                                        Encontrado = false
+                                    )
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1109,7 +1211,7 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                             colors = ButtonDefaults.buttonColors(Color(0xFF049EFE))
                         ) {
                             Text(
-                                text = "Cadastrar objeto encontrado",
+                                text = if (tab == 0) "Cadastrar objeto encontrado" else "Cadastrar objeto perdido",
                                 style = TextStyle(
                                     color = Color(0XFFFFFFFF),
                                     fontFamily = InterFontFamily
