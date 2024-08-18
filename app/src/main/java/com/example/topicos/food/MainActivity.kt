@@ -240,19 +240,21 @@ fun GetObjPerdidos(onResult: (List<Map<String, Any?>>) -> Unit) {
                 val result = task.result
                 if (result != null) {
                     for (obj in result) {
-                        val objPerdidoMap = hashMapOf(
-                            "NomeObj" to obj.getString("NomeObj"),
-                            "Tag" to obj.getString("Tag"),
-                            "Descricao" to obj.getString("Descricao"),
-                            "Data" to obj.getString("Data"),
-                            "id" to obj.getString("id"),
-                            "Mensagem" to obj.getString("Mensagem"),
-                            "ContatoCelular" to obj.getString("Celular"),
-                            "ContatoEmail" to obj.getString("Email"),
-                            "Colection" to obj.getString("Colection"),
-                            "Encontrado" to obj.getBoolean("Encontrado"),
-                        )
-                        objts.add(objPerdidoMap)
+                        if (obj.getBoolean("Encontrado") != true) {
+                            val objPerdidoMap = hashMapOf(
+                                "NomeObj" to obj.getString("NomeObj"),
+                                "Tag" to obj.getString("Tag"),
+                                "Descricao" to obj.getString("Descricao"),
+                                "Data" to obj.getString("Data"),
+                                "id" to obj.getString("id"),
+                                "Mensagem" to obj.getString("Mensagem"),
+                                "ContatoCelular" to obj.getString("Celular"),
+                                "ContatoEmail" to obj.getString("Email"),
+                                "Colection" to obj.getString("Colection"),
+                                "Encontrado" to obj.getBoolean("Encontrado"),
+                            )
+                            objts.add(objPerdidoMap)
+                        }
                         Log.d("OBJPERDIDO", "nomeobj: ${obj.getString("NomeObj")}")
                     }
                 }
@@ -277,20 +279,22 @@ private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
                 val result = task.result
                 if (result != null) {
                     for (obj in result) {
-                        val objPerdidoMap = hashMapOf(
-                            "NomeObj" to obj.getString("NomeObj"),
-                            "Tag" to obj.getString("Tag"),
-                            "Descricao" to obj.getString("Descricao"),
-                            "Data" to obj.getString("Data"),
-                            "id" to obj.getString("id"),
-                            "Mensagem" to obj.getString("Mensagem"),
-                            "ContatoCelular" to obj.getString("Celular"),
-                            "ContatoEmail" to obj.getString("Email"),
-                            "Colection" to obj.getString("Colection"),
-                            "Encontrado" to obj.getBoolean("Encontrado"),
-                        )
-                        objts.add(objPerdidoMap)
-                        Log.d("OBJPERDIDO", "nomeobj: ${obj.getString("NomeObj")}")
+                        if (obj.getBoolean("Encontrado") != true) {
+                            val objPerdidoMap = hashMapOf(
+                                "NomeObj" to obj.getString("NomeObj"),
+                                "Tag" to obj.getString("Tag"),
+                                "Descricao" to obj.getString("Descricao"),
+                                "Data" to obj.getString("Data"),
+                                "id" to obj.getString("id"),
+                                "Mensagem" to obj.getString("Mensagem"),
+                                "ContatoCelular" to obj.getString("Celular"),
+                                "ContatoEmail" to obj.getString("Email"),
+                                "Colection" to obj.getString("Colection"),
+                                "Encontrado" to obj.getBoolean("Encontrado"),
+                            )
+                            objts.add(objPerdidoMap)
+                            Log.d("OBJENCONTRADO", "nomeobj: ${obj.getString("NomeObj")}")
+                        }
                     }
                 }
                 onResult(objts)
@@ -343,9 +347,9 @@ fun DeleteObjEncontrado(id: String){
     }
 }
 
-fun UpdateObjStatus(id: String, Encontrado: Boolean){
+fun UpdateObjStatus(id: String, Encontrado: Boolean, Collection: String){
     val db = FirebaseFirestore.getInstance()
-    db.collection("Perdidos").document(id).update("Encontrado", Encontrado).addOnCompleteListener {
+    db.collection(Collection).document(id).update("Encontrado", Encontrado).addOnCompleteListener {
         Log.d("UPDATE", "O UPDATE em Perdidos foi bem sucedido")
     }.addOnFailureListener{
         Log.d("UPDATE", "O UPDATE em Perdidos falhou")
@@ -578,10 +582,9 @@ fun App(navController: NavHostController, tab: Int) {
                         selected = selectedTab == index,
                         onClick = {
                             selectedTab = index
+                            val tab = index.toString()
                             // Navegar para a aba selecionada
-                            navController.navigate("home/$index") {
-                                popUpTo("home/$index") { inclusive = true }
-                            }
+                            navController.navigate("home/$tab")
                         },
                         text = { Text(title) }
                     )
@@ -628,7 +631,7 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
     val collection = if (tab == 0) "Encontrados" else "Perdidos"
     LaunchedEffect(item) {
         objeto = GetObj(item, collection)
-        Log.d("OBJ2", objeto.toString())
+        Log.d("OBJETO", objeto.toString())
         isLoading = false
     }
 
@@ -636,7 +639,9 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
         Column(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth().fillMaxHeight()
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
         ) {
             CircularProgressIndicator()
         }
@@ -665,7 +670,7 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                 }
             }
             item {
-                objeto?.let { obj ->
+                objeto?.let {
                     Image(
                         painter = painterResource(id = R.drawable.default_image),
                         contentDescription = "Profile Picture",
@@ -712,6 +717,11 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                             }
                         }
                         Spacer(modifier = Modifier.height(25.dp))
+                        Text(
+                            text = "descrição:",
+                            style = TextStyle(fontWeight = FontWeight.Bold),
+                            fontFamily = InterFontFamily
+                        )
                         Text(
                             text = obj["Descricao"] as String? ?: "DESCRIÇÃO: ...",
                             fontFamily = InterFontFamily
@@ -789,6 +799,27 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                                     fontFamily = InterFontFamily
                                 )
                             )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        objeto?.let { obj ->
+                            Button(
+                                onClick = {
+                                    UpdateObjStatus(obj["id"] as String? ?: "", true, obj["Colection"] as String? ?: "Perdidos")
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                                    .border(1.dp, Color(0xFF049EFE), CircleShape),
+                                colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
+                            ) {
+                                Text(
+                                    text = "Marcar como entregue",
+                                    style = TextStyle(
+                                        color = Color(0xFF049EFE),
+                                        fontFamily = InterFontFamily
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -961,11 +992,13 @@ fun RecentsSection(navController: NavHostController, tab: Int) {
     LaunchedEffect(Unit) {
         if (tab == 0) {
             GetObjEncontrados { result ->
+                Log.d("OBJENCONTRADO", result.toString())
                 items.value = result
                 isLoading.value = false
             }
         } else {
             GetObjPerdidos { result ->
+                Log.d("OBJPERDIDO", result.toString())
                 items.value = result
                 isLoading.value = false
             }
@@ -980,7 +1013,9 @@ fun RecentsSection(navController: NavHostController, tab: Int) {
             Column(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth().fillMaxHeight()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
             ) {
                 CircularProgressIndicator()
             }
@@ -991,7 +1026,6 @@ fun RecentsSection(navController: NavHostController, tab: Int) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 items(items.value.size) { item ->
-                    Log.d("ATNNJ", tab.toString())
                     CardObjeto(
                         items.value[item].toString(),
                         navController,
