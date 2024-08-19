@@ -73,6 +73,11 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation ("com.google.firebase:firebase-firestore:24.4.1") // Versão atual
 //    implementation("com.google.android.gms:play-services-auth:20.4.0")
+    implementation ("com.google.firebase:firebase-storage-ktx")
+    implementation ("io.coil-kt:coil-compose:2.3.0")
+    implementation ("androidx.activity:activity-ktx:1.8.0")
+    implementation ("androidx.compose.ui:ui:1.4.0")
+    implementation ("com.google.firebase:firebase-storage:20.2.0")
     implementation("com.google.android.gms:play-services-maps:18.0.1")
     implementation("com.google.android.libraries.places:places:3.1.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.0")

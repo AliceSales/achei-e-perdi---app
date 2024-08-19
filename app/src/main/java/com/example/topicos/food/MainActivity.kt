@@ -1,5 +1,18 @@
 package com.example.topicos.food
 
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.ktx.storage
+
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -8,7 +21,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -81,13 +96,11 @@ import android.location.Geocoder
 import android.Manifest
 import android.location.Location
 
-// Definindo a família de fontes Inter
 val InterFontFamily = FontFamily(
     Font(R.font.inter_regular, FontWeight.Normal),
     Font(R.font.inter_bold, FontWeight.Bold)
 )
 
-// Para abrir o serviço de emails
 fun openEmailService(context: Context, email: String, subject: String = "", body: String = "") {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:$email")
@@ -161,15 +174,22 @@ fun generateRandomString(): String {
         .map { chars.random() }
         .joinToString("")
 }
+fun generateRandomIdToImage(): String {
+    val chars = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+    return (1..64)
+        .map { chars.random() }
+        .joinToString("")
+}
 
-fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: String){
+fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: String, imagem: String){
     val db = FirebaseFirestore.getInstance()
     val userMap = hashMapOf(
         "Nome" to NomeCompleto,
         "Email" to Email,
         "Celular" to Celular,
         "CPF" to Cpf,
-        "DataCriacao" to Data
+        "DataCriacao" to Data,
+        "imagem" to imagem
     )
     db.collection("users").document(Cpf)
         .set(userMap).addOnCompleteListener {
@@ -181,7 +201,7 @@ fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: Stri
 
 fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: String,
                        Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean,
-                       Local: String){
+                       imagem: String, Local: String, Colection: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -194,7 +214,8 @@ fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: St
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
         "Encontrado" to Encontrado,
-        "Colection" to "Perdidos",
+        "Colection" to Colection,
+        "imagem" to imagem,
         "Local" to Local
     )
     db.collection("Perdidos").document(id)
@@ -223,7 +244,8 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
                 "ContatoEmail" to documentSnapshot.getString("Email"),
                 "Colection" to documentSnapshot.getString("Colection"),
                 "Encontrado" to documentSnapshot.getBoolean("Encontrado"),
-                "Local" to documentSnapshot.getString("Local")
+                "Local" to documentSnapshot.getString("Local"),
+                "imagem" to documentSnapshot.getString("imagem")
             )
         } else {
             Log.d("OBJETOGET", "O GET não encontrou o documento")
@@ -238,7 +260,7 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
 fun RegisterObjEncontrado(
     NomeObj: String, Tag: String, Descricao: String, Data: String,
     Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean,
-    Local: String){
+    imagem: String, Colection: String, Local: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -250,9 +272,10 @@ fun RegisterObjEncontrado(
         "Mensagem" to Mensagem,
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
-        "Colection" to "Encontrados",
         "Encontrado" to Encontrado,
-        "Local" to Local
+        "Local" to Local,
+        "Colection" to Colection,
+        "imagem" to imagem
     )
     db.collection("Encontrados").document(id)
         .set(ObjMap).addOnCompleteListener {
@@ -285,7 +308,8 @@ fun GetObjPerdidos(onResult: (List<Map<String, Any?>>) -> Unit) {
                                 "ContatoEmail" to obj.getString("Email"),
                                 "Colection" to obj.getString("Colection"),
                                 "Encontrado" to obj.getBoolean("Encontrado"),
-                                "Local" to obj.getString("Local")
+                                "Local" to obj.getString("Local"),
+                                "imagem" to obj.getString("imagem")
                             )
                             objts.add(objPerdidoMap)
                         }
@@ -300,7 +324,6 @@ fun GetObjPerdidos(onResult: (List<Map<String, Any?>>) -> Unit) {
         }
 }
 
-// Função para obter objetos encontrados do Firestore
 private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
     val db = FirebaseFirestore.getInstance()
     val objts = ArrayList<Map<String, Any?>>()
@@ -325,7 +348,8 @@ private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
                                 "ContatoEmail" to obj.getString("Email"),
                                 "Colection" to obj.getString("Colection"),
                                 "Encontrado" to obj.getBoolean("Encontrado"),
-                                "Local" to obj.getString("Local")
+                                "Local" to obj.getString("Local"),
+                                "imagem" to obj.getString("imagem")
                             )
                             objts.add(objPerdidoMap)
                             Log.d("OBJENCONTRADO", "nomeobj: ${obj.getString("NomeObj")}")
@@ -355,7 +379,8 @@ fun GetUsers(): ArrayList<Any> {
                     "Email" to obj.getString("Email"),
                     "Celular" to obj.getString("Celular"),
                     "CPF" to obj.getString("Cpf"),
-                    "DataCriacao" to obj.getString("Data")
+                    "DataCriacao" to obj.getString("Data"),
+                    "imagem" to obj.getString("imagem")
                 )
                 objts.add(objPerdidoMap)
                 Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
@@ -408,7 +433,7 @@ fun NavGraph(navController: NavHostController) {
             val item = backStackEntry.arguments?.getString("item")
             val tabString = backStackEntry.arguments?.getString("tab")
             val tab = tabString?.toIntOrNull() ?: 0
-            Details(item = item ?: "", navController = navController, tab = tab)
+            Details(item = item ?: "", navController = navController, tab = tab, imgCollectionId = "/images/1000097143")
         }
         composable("cadastro-item/{tab}") { backStackEntry ->
             val tabString = backStackEntry.arguments?.getString("tab")
@@ -517,7 +542,7 @@ fun OnboardingPage(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        // Imagem de background
+
         Image(
             painter = painterResource(id = backgroundRes),
             contentDescription = null,
@@ -525,7 +550,6 @@ fun OnboardingPage(
             contentScale = ContentScale.Crop
         )
 
-        // Conteúdo sobreposto
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -564,7 +588,7 @@ fun OnboardingPage(
 
 @Composable
 fun App(navController: NavHostController, tab: Int) {
-    var selectedTab by remember { mutableStateOf(tab) } // Flag para controlar a aba selecionada
+    var selectedTab by remember { mutableStateOf(tab) }
     val tabs = listOf("Encontrados", "Perdidos")
 
     Surface(
@@ -575,7 +599,6 @@ fun App(navController: NavHostController, tab: Int) {
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Conteúdo principal da tela
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -588,8 +611,6 @@ fun App(navController: NavHostController, tab: Int) {
                         Spacer(modifier = Modifier.height(16.dp))
                         InstructionHeader(navController = navController, 0)
                         Spacer(modifier = Modifier.height(16.dp))
-                        FiltrosSection()
-                        Spacer(modifier = Modifier.height(16.dp))
                         RecentsSection(navController = navController, 0)
                     }
                     1 -> {
@@ -597,14 +618,11 @@ fun App(navController: NavHostController, tab: Int) {
                         Spacer(modifier = Modifier.height(16.dp))
                         InstructionHeader(navController = navController, 1)
                         Spacer(modifier = Modifier.height(16.dp))
-                        FiltrosSection()
-                        Spacer(modifier = Modifier.height(16.dp))
                         RecentsSection(navController = navController, 1)
                     }
                 }
             }
 
-            // Barra de navegação das abas na parte inferior
             TabRow(
                 selectedTabIndex = selectedTab,
                 contentColor = Color.Black,
@@ -618,7 +636,6 @@ fun App(navController: NavHostController, tab: Int) {
                         onClick = {
                             selectedTab = index
                             val tab = index.toString()
-                            // Navegar para a aba selecionada
                             navController.navigate("home/$tab")
                         },
                         text = { Text(title) }
@@ -657,18 +674,18 @@ fun CustomIconButton(
 }
 
 @Composable
-fun Details(item: String, navController: NavHostController, tab: Int) {
+fun Details(item: String, navController: NavHostController, tab: Int, imgCollectionId: String = "/images/1000097143") {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var objeto by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
-    // Verifique se o LaunchedEffect está sendo executado
     val collection = if (tab == 0) "Encontrados" else "Perdidos"
     LaunchedEffect(item) {
         objeto = GetObj(item, collection)
         Log.d("OBJETO", objeto.toString())
         isLoading = false
     }
+    ImagePickerAndUploader(collection = if (tab == 0) "Encontrados" else "Perdidos")
 
     if (isLoading) {
         Column(
@@ -681,7 +698,6 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
             CircularProgressIndicator()
         }
     } else {
-        // Renderiza o conteúdo quando isLoading é false
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -705,15 +721,8 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                 }
             }
             item {
-                objeto?.let {
-                    Image(
-                        painter = painterResource(id = R.drawable.default_image),
-                        contentDescription = "Profile Picture",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(360.dp),
-                        contentScale = ContentScale.Crop
-                    )
+                objeto?.let {obj ->
+                    FirebaseImage(filePath = imgCollectionId, item = obj["imagem"].toString())
                 }
             }
             item {
@@ -726,14 +735,14 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.weight(2f)) {
+                            Column(Modifier.weight(3f)) {
                                 Text(
                                     text = if (tab == 0) "encontrado no:" else "perdido perto do:",
                                     style = TextStyle(fontWeight = FontWeight.Bold),
                                     fontFamily = InterFontFamily
                                 )
                                 Text(
-                                    text = obj["local"] as String? ?: "Sem local definido",
+                                    text = obj["Local"] as String? ?: "Sem local definido",
                                     modifier = Modifier.fillMaxWidth(),
                                     fontFamily = InterFontFamily
                                 )
@@ -795,7 +804,7 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Image(
-                                painter = painterResource(id = R.drawable.delivery),
+                                painter = painterResource(id = R.drawable.bonequinho),
                                 contentDescription = "Profile User",
                                 modifier = Modifier
                                     .size(64.dp)
@@ -880,7 +889,7 @@ fun SectionHeaderUser(text: String) {
             modifier = Modifier.padding(bottom = 10.dp)
         )
         Image(
-            painter = painterResource(id = R.drawable.delivery),
+            painter = painterResource(id = R.drawable.bonequinho),
             contentDescription = "Profile User",
             modifier = Modifier
                 .size(64.dp)
@@ -1020,7 +1029,6 @@ fun CategoryCard(imgCard: Int, category: String) {
 
 @Composable
 fun RecentsSection(navController: NavHostController, tab: Int) {
-    // Estado para armazenar os itens encontrados
     val items = remember { mutableStateOf(emptyList<Map<String, Any?>>()) }
     val isLoading = remember { mutableStateOf(true) }
 
@@ -1064,6 +1072,7 @@ fun RecentsSection(navController: NavHostController, tab: Int) {
                     CardObjeto(
                         items.value[item].toString(),
                         navController,
+                        items.value[item].get("imagem").toString(),
                         tab = tab
                     )
                 }
@@ -1073,14 +1082,16 @@ fun RecentsSection(navController: NavHostController, tab: Int) {
 }
 
 @Composable
-fun CardObjeto(item: String, navController: NavHostController, tab: Int) {
+fun CardObjeto(item: String, navController: NavHostController, imgCollectionId: String = "/images/1000097143", tab: Int) {
+    Log.d("CARD", item)
     val regex_id = """id=([^,}]+)""".toRegex()
     val regex_nome = """NomeObj=([^,}]+)""".toRegex()
     val regex_descricao = """Descricao=([^,}]+)""".toRegex()
+    //val regex_imagem = """imagem=([^,}]+)""".toRegex()
     val id = regex_id.find(item)?.groups?.get(1)?.value ?: "Id não disponível"
     val nomeObj = regex_nome.find(item)?.groups?.get(1)?.value ?: "Nome não disponível"
     val descricao = regex_descricao.find(item)?.groups?.get(1)?.value ?: "Descricao não disponível"
-
+    val imagem = imgCollectionId
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1094,15 +1105,7 @@ fun CardObjeto(item: String, navController: NavHostController, tab: Int) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.default_image),
-                contentDescription = item,
-                modifier = Modifier
-                    .height(100.dp)
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.medium),
-                contentScale = ContentScale.Crop
-            )
+            FirebaseImage(filePath = imagem, item = item)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = nomeObj,
@@ -1129,7 +1132,8 @@ data class CadastroForm(
     var data: String = "",
     var mensagem: String = "",
     var contatoEmail: String = "",
-    var local: String = ""
+    var local: String = "",
+    var collection: String = ""
 )
 
 @Composable
@@ -1185,7 +1189,7 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
             item {
                 Column(modifier = Modifier.padding(25.dp)) {
                     Text(
-                        text = if (tab == 0) "Cadastrar objeto encontrado $tab" else "Cadastrar objeto perdido",
+                        text = if (tab == 0) "Cadastrar objeto encontrado" else "Cadastrar objeto perdido",
                         style = TextStyle(
                             fontFamily = InterFontFamily,
                             fontWeight = FontWeight.ExtraBold,
@@ -1193,14 +1197,8 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                         )
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.default_image),
-                        contentDescription = if (tab == 0) "Cadastro do objeto encontrado" else "Cadastro do objeto perdido",
-                        modifier = Modifier
-                            .height(200.dp)
-                            .fillMaxWidth(),
-                        contentScale = ContentScale.Crop
-                    )
+
+                    ImagePickerAndUploader(collection = if (tab == 0) "Encontrados" else "Perdidos")
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Column {
@@ -1315,7 +1313,9 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                                         ContatoCelular = form.value.celular,
                                         ContatoEmail = form.value.contatoEmail,
                                         Encontrado = false,
-                                        Local = form.value.local
+                                        Local = form.value.local,
+                                        imagem = Global.globalVariable,
+                                        Colection = form.value.collection
                                     )
                                 } else {
                                     RegisterObjPerdido(
@@ -1327,7 +1327,9 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                                         ContatoCelular = form.value.celular,
                                         ContatoEmail = form.value.contatoEmail,
                                         Encontrado = false,
-                                        Local = form.value.local
+                                        Local = form.value.local,
+                                        imagem = Global.globalVariable,
+                                        Colection = form.value.collection
                                     )
                                 }
                             },
@@ -1349,4 +1351,127 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
             }
         }
     }
+}
+
+@Composable
+fun FirebaseImage(filePath: String, item: String) {
+    var imageUrl by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(filePath) {
+        try {
+            getImageUrl(filePath,
+                onSuccess = { url ->
+                    imageUrl = url
+                    isLoading = false
+                },
+                onFailure = { ex ->
+                    error = ex.message
+                    isLoading = false
+                }
+            )
+        }catch (e: Exception) {
+            error = e.message
+        }
+    }
+
+    if (isLoading) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(128.dp)
+        ) {
+            CircularProgressIndicator()
+        }
+    } else if (error != null) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(128.dp)
+        ) {
+            Text(text = "Error: $error")
+        }
+    } else if (imageUrl != null) {
+        Image(
+            painter = rememberAsyncImagePainter(imageUrl),
+            contentDescription = item,
+            modifier = Modifier
+                .height(100.dp)
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium),
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+fun getImageUrl(filePath: String, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
+    val storageRef = Firebase.storage.reference.child(filePath)
+
+    storageRef.downloadUrl
+        .addOnSuccessListener { uri ->
+            onSuccess(uri.toString())
+        }
+        .addOnFailureListener { exception ->
+            onFailure(exception)
+        }
+}
+object Global {
+    var globalVariable: String = ""
+}
+
+@Composable
+fun ImagePickerAndUploader(collection: String) {
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var uploadState by remember { mutableStateOf<UploadState>(UploadState.Idle) }
+    var imageIdInFirebase = ""
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            imageUri = it
+            Global.globalVariable = uploadImageToFirebase(collection, it, onSuccess = {
+                Log.d("UPLOAD", "Upload realizado com sucesso, $imageIdInFirebase")
+                uploadState = UploadState.Success(it)
+            }, onFailure = {
+                uploadState = UploadState.Failure(it)
+            })
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+            Text("Escolher Imagem")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        imageUri?.let {
+            Image(painter = rememberAsyncImagePainter(it), contentDescription = null, modifier = Modifier.size(128.dp))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+    }
+}
+
+sealed class UploadState {
+    object Idle : UploadState()
+    object Loading : UploadState()
+    data class Success(val downloadUrl: String) : UploadState()
+    data class Failure(val error: String) : UploadState()
+}
+
+fun uploadImageToFirebase(collection: String, uri: Uri, onSuccess: (String) -> Unit, onFailure: (String) -> Unit): String {
+    val storageRef = Firebase.storage.reference.child("$collection/${uri.lastPathSegment}")
+
+    val uploadTask = storageRef.putFile(uri)
+
+    uploadTask.addOnSuccessListener {
+        storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
+            onSuccess(downloadUri.toString())
+        }.addOnFailureListener { exception ->
+            onFailure(exception.message ?: "Unknown error")
+        }
+    }.addOnFailureListener { exception ->
+        onFailure(exception.message ?: "Unknown error")
+    }
+    return "$collection/${uri.lastPathSegment}"
 }
