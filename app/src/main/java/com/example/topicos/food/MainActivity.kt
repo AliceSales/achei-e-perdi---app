@@ -1,7 +1,9 @@
 package com.example.topicos.food
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -57,6 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -68,6 +72,14 @@ import com.example.topicos.food.ui.theme.FoodTheme
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.FusedLocationProviderClient
+import android.location.Geocoder
+import android.Manifest
+import android.location.Location
 
 // Definindo a família de fontes Inter
 val InterFontFamily = FontFamily(
@@ -85,8 +97,25 @@ fun openEmailService(context: Context, email: String, subject: String = "", body
     context.startActivity(Intent.createChooser(intent, "Escolha o app de e-mail"))
 }
 
-// MAPBOX
-
+@Composable
+fun CurrentLocationButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .border(1.dp, Color(0xFF049EFE), CircleShape),
+        colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
+    ) {
+        Text(
+            text = "Pegar minha localização",
+            style = TextStyle(
+                color = Color(0xFF049EFE),
+                fontFamily = InterFontFamily
+            )
+        )
+    }
+}
 
 @Composable
 fun FoodTheme(content: @Composable () -> Unit) {
@@ -151,7 +180,8 @@ fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: Stri
 }
 
 fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: String,
-                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean,
+                       Local: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -164,8 +194,8 @@ fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: St
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
         "Encontrado" to Encontrado,
-        "Colection" to "Perdidos"
-
+        "Colection" to "Perdidos",
+        "Local" to Local
     )
     db.collection("Perdidos").document(id)
         .set(ObjMap).addOnCompleteListener {
@@ -193,6 +223,7 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
                 "ContatoEmail" to documentSnapshot.getString("Email"),
                 "Colection" to documentSnapshot.getString("Colection"),
                 "Encontrado" to documentSnapshot.getBoolean("Encontrado"),
+                "Local" to documentSnapshot.getString("Local")
             )
         } else {
             Log.d("OBJETOGET", "O GET não encontrou o documento")
@@ -206,7 +237,8 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
 
 fun RegisterObjEncontrado(
     NomeObj: String, Tag: String, Descricao: String, Data: String,
-    Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+    Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean,
+    Local: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -219,7 +251,8 @@ fun RegisterObjEncontrado(
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
         "Colection" to "Encontrados",
-        "Encontrado" to Encontrado
+        "Encontrado" to Encontrado,
+        "Local" to Local
     )
     db.collection("Encontrados").document(id)
         .set(ObjMap).addOnCompleteListener {
@@ -252,6 +285,7 @@ fun GetObjPerdidos(onResult: (List<Map<String, Any?>>) -> Unit) {
                                 "ContatoEmail" to obj.getString("Email"),
                                 "Colection" to obj.getString("Colection"),
                                 "Encontrado" to obj.getBoolean("Encontrado"),
+                                "Local" to obj.getString("Local")
                             )
                             objts.add(objPerdidoMap)
                         }
@@ -291,6 +325,7 @@ private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
                                 "ContatoEmail" to obj.getString("Email"),
                                 "Colection" to obj.getString("Colection"),
                                 "Encontrado" to obj.getBoolean("Encontrado"),
+                                "Local" to obj.getString("Local")
                             )
                             objts.add(objPerdidoMap)
                             Log.d("OBJENCONTRADO", "nomeobj: ${obj.getString("NomeObj")}")
@@ -698,7 +733,7 @@ fun Details(item: String, navController: NavHostController, tab: Int) {
                                     fontFamily = InterFontFamily
                                 )
                                 Text(
-                                    text = obj["local"] as String? ?: "NOME DO ITEM",
+                                    text = obj["local"] as String? ?: "Sem local definido",
                                     modifier = Modifier.fillMaxWidth(),
                                     fontFamily = InterFontFamily
                                 )
@@ -1094,11 +1129,34 @@ data class CadastroForm(
     var data: String = "",
     var mensagem: String = "",
     var contatoEmail: String = "",
+    var local: String = ""
 )
 
 @Composable
 fun CadastroObjetos(navController: NavHostController, tab: Int) {
     val form = remember { mutableStateOf(CadastroForm()) }
+    val context = LocalContext.current
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    var locationText by remember { mutableStateOf("Localização não disponível") }
+
+    val locationPermissionGranted = remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        if (!locationPermissionGranted.value) {
+            ActivityCompat.requestPermissions(
+                context as Activity,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                1
+            )
+        }
+    }
 
     Box(modifier = Modifier
         .fillMaxSize()
@@ -1207,6 +1265,39 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp)
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                if (locationPermissionGranted.value) {
+                                    fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                                        location?.let {
+                                            val locationString = "Latitude: ${it.latitude}, Longitude: ${it.longitude}"
+                                            locationText = locationString
+                                            form.value = form.value.copy(local = locationString)
+                                        } ?: run {
+                                            locationText = "Localização não encontrada"
+                                        }
+                                    }
+                                } else {
+                                    locationText = "Permissão não concedida"
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .border(1.dp, Color(0xFF049EFE), CircleShape),
+                            colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
+                        ) {
+                            Text(
+                                text = "Pegar minha localização",
+                                style = TextStyle(
+                                    color = Color(0xFF049EFE),
+                                    fontFamily = InterFontFamily
+                                )
+                            )
+                        }
+                        Text(text = locationText)
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1215,7 +1306,6 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                         Button(
                             onClick = {
                                 if (tab == 0) {
-                                    // Chama a função RegisterObjPerdido com os valores dos inputs
                                     RegisterObjEncontrado(
                                         NomeObj = form.value.nomeObj,
                                         Tag = form.value.categoria,
@@ -1224,7 +1314,8 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                                         Mensagem = form.value.mensagem,
                                         ContatoCelular = form.value.celular,
                                         ContatoEmail = form.value.contatoEmail,
-                                        Encontrado = false
+                                        Encontrado = false,
+                                        Local = form.value.local
                                     )
                                 } else {
                                     RegisterObjPerdido(
@@ -1235,7 +1326,8 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
                                         Mensagem = form.value.mensagem,
                                         ContatoCelular = form.value.celular,
                                         ContatoEmail = form.value.contatoEmail,
-                                        Encontrado = false
+                                        Encontrado = false,
+                                        Local = form.value.local
                                     )
                                 }
                             },
