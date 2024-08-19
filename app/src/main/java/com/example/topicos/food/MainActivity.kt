@@ -433,7 +433,7 @@ fun NavGraph(navController: NavHostController) {
             val item = backStackEntry.arguments?.getString("item")
             val tabString = backStackEntry.arguments?.getString("tab")
             val tab = tabString?.toIntOrNull() ?: 0
-            Details(item = item ?: "", navController = navController, tab = tab, imgCollectionId = "/images/1000097143")
+            Details(item = item ?: "", navController = navController, tab = tab)
         }
         composable("cadastro-item/{tab}") { backStackEntry ->
             val tabString = backStackEntry.arguments?.getString("tab")
@@ -674,7 +674,7 @@ fun CustomIconButton(
 }
 
 @Composable
-fun Details(item: String, navController: NavHostController, tab: Int, imgCollectionId: String = "/images/1000097143") {
+fun Details(item: String, navController: NavHostController, tab: Int) {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var objeto by remember { mutableStateOf<Map<String, Any?>?>(null) }
@@ -722,7 +722,8 @@ fun Details(item: String, navController: NavHostController, tab: Int, imgCollect
             }
             item {
                 objeto?.let {obj ->
-                    FirebaseImage(filePath = imgCollectionId, item = obj["imagem"].toString())
+                    Log.d("OBJETO", obj["imagem"].toString() )
+                    FirebaseImage(filePath = obj["imagem"].toString(), item = obj.toString(), isDetails = true)
                 }
             }
             item {
@@ -817,7 +818,7 @@ fun Details(item: String, navController: NavHostController, tab: Int, imgCollect
                                 contentScale = ContentScale.Crop
                             )
                             Text(
-                                text = "NOME DA PESSOA",
+                                text = "Eliab Bernardino",
                                 Modifier.padding(start = 10.dp),
                                 fontFamily = InterFontFamily
                             )
@@ -1070,9 +1071,9 @@ fun RecentsSection(navController: NavHostController, tab: Int) {
             ) {
                 items(items.value.size) { item ->
                     CardObjeto(
-                        items.value[item].toString(),
-                        navController,
-                        items.value[item].get("imagem").toString(),
+                        item = items.value[item].toString(),
+                        navController = navController,
+                        imgCollectionId = items.value[item].get("imagem").toString(),
                         tab = tab
                     )
                 }
@@ -1105,7 +1106,7 @@ fun CardObjeto(item: String, navController: NavHostController, imgCollectionId: 
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            FirebaseImage(filePath = imagem, item = item)
+            FirebaseImage(filePath = imagem, item = item, isDetails = false)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = nomeObj,
@@ -1354,7 +1355,7 @@ fun CadastroObjetos(navController: NavHostController, tab: Int) {
 }
 
 @Composable
-fun FirebaseImage(filePath: String, item: String) {
+fun FirebaseImage(filePath: String, item: String, isDetails: Boolean) {
     var imageUrl by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -1394,8 +1395,9 @@ fun FirebaseImage(filePath: String, item: String) {
         Image(
             painter = rememberAsyncImagePainter(imageUrl),
             contentDescription = item,
+
             modifier = Modifier
-                .height(100.dp)
+                .height(if (isDetails) 300.dp else 100.dp)
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.medium),
             contentScale = ContentScale.Crop
