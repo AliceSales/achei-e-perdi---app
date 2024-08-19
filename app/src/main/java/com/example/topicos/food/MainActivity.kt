@@ -13,8 +13,10 @@ import coil.request.ImageRequest
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -47,6 +49,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
@@ -70,23 +74,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.topicos.food.ui.theme.FoodTheme
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.FusedLocationProviderClient
+import android.location.Geocoder
+import android.Manifest
+import android.location.Location
 
-// Definindo a família de fontes Inter
 val InterFontFamily = FontFamily(
     Font(R.font.inter_regular, FontWeight.Normal),
     Font(R.font.inter_bold, FontWeight.Bold)
 )
 
-// Para abrir o serviço de emails
 fun openEmailService(context: Context, email: String, subject: String = "", body: String = "") {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:$email")
@@ -96,8 +110,25 @@ fun openEmailService(context: Context, email: String, subject: String = "", body
     context.startActivity(Intent.createChooser(intent, "Escolha o app de e-mail"))
 }
 
-// MAPBOX
-
+@Composable
+fun CurrentLocationButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .border(1.dp, Color(0xFF049EFE), CircleShape),
+        colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
+    ) {
+        Text(
+            text = "Pegar minha localização",
+            style = TextStyle(
+                color = Color(0xFF049EFE),
+                fontFamily = InterFontFamily
+            )
+        )
+    }
+}
 
 @Composable
 fun FoodTheme(content: @Composable () -> Unit) {
@@ -169,7 +200,8 @@ fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: Stri
 }
 
 fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: String,
-                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean, imagem: String){
+                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean,
+                       imagem: String, Local: String, Colection: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -182,9 +214,9 @@ fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: St
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
         "Encontrado" to Encontrado,
-        "Colection" to "Perdidos",
-        "imagem" to imagem
-
+        "Colection" to Colection,
+        "imagem" to imagem,
+        "Local" to Local
     )
     db.collection("Perdidos").document(id)
         .set(ObjMap).addOnCompleteListener {
@@ -195,6 +227,7 @@ fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: St
 }
 
 suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
+    Log.d("OBJGET", "O GET começou o id é $collection")
     val db = FirebaseFirestore.getInstance()
     return try {
         val documentSnapshot = db.collection(collection).document(id).get().await()
@@ -211,6 +244,8 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
                 "ContatoEmail" to documentSnapshot.getString("Email"),
                 "Colection" to documentSnapshot.getString("Colection"),
                 "Encontrado" to documentSnapshot.getBoolean("Encontrado"),
+                "Local" to documentSnapshot.getString("Local"),
+                "imagem" to documentSnapshot.getString("imagem")
             )
         } else {
             Log.d("OBJETOGET", "O GET não encontrou o documento")
@@ -224,7 +259,8 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
 
 fun RegisterObjEncontrado(
     NomeObj: String, Tag: String, Descricao: String, Data: String,
-    Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean, imagem: String, Colection: String){
+    Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean,
+    imagem: String, Colection: String, Local: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -236,51 +272,58 @@ fun RegisterObjEncontrado(
         "Mensagem" to Mensagem,
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
-        "Colection" to Colection,
         "Encontrado" to Encontrado,
+        "Local" to Local,
+        "Colection" to Colection,
         "imagem" to imagem
     )
     db.collection("Encontrados").document(id)
         .set(ObjMap).addOnCompleteListener {
-            Log.d("DB", "A inserção de Obj Perdido " + id + " foi bem sucedida")
+            Log.d("DB", "A inserção de Obj encontrado " + id + " foi bem sucedida")
         }.addOnFailureListener{
-            Log.d("DB", "A inserção de Obj Perdido " + id + " falhou")
+            Log.d("DB", "A inserção de Obj encontrado " + id + " falhou")
         }
 }
 
-fun GetObjPerdidos(): ArrayList<Any> {
+fun GetObjPerdidos(onResult: (List<Map<String, Any?>>) -> Unit) {
     val db = FirebaseFirestore.getInstance()
-    var objts = ArrayList<Any>()
-    val ObjPerdidos = db.collection("Perdidos")
-        .get().addOnCompleteListener {
-            Log.d("GET", "O GET em Perdidos foi bem sucedido")
-        }.addOnFailureListener {
-            Log.d("OBJPERDIDO", "Erro ao obter os objetos perdidos")
-        }.addOnCanceledListener{
-            Log.d("GET", "O GET em Perdidos falhou")
-        }.addOnSuccessListener { result ->
-            for (obj in result) {
-                val objPerdidoMap = hashMapOf(
-                    "NomeObj" to obj.getString("NomeObj"),
-                    "Tag" to obj.getString("Tag"),
-                    "Descricao" to obj.getString("Descricao"),
-                    "Data" to obj.getString("Data"),
-                    "id" to obj.getString("id"),
-                    "Mensagem" to obj.getString("Mensagem"),
-                    "ContatoCelular" to obj.getString("Celular"),
-                    "ContatoEmail" to obj.getString("Email"),
-                    "Colection" to obj.getString("Colection"),
-                    "Encontrado" to obj.getBoolean("Encontrado"),
-                    "imagem" to obj.getString("imagem")
-                )
-                objts.add(objPerdidoMap)
-                Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
+    val objts = ArrayList<Map<String, Any?>>()
+
+    db.collection("Perdidos")
+        .get()
+        .addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val result = task.result
+                if (result != null) {
+                    for (obj in result) {
+                        if (obj.getBoolean("Encontrado") != true) {
+                            val objPerdidoMap = hashMapOf(
+                                "NomeObj" to obj.getString("NomeObj"),
+                                "Tag" to obj.getString("Tag"),
+                                "Descricao" to obj.getString("Descricao"),
+                                "Data" to obj.getString("Data"),
+                                "id" to obj.getString("id"),
+                                "Mensagem" to obj.getString("Mensagem"),
+                                "ContatoCelular" to obj.getString("Celular"),
+                                "ContatoEmail" to obj.getString("Email"),
+                                "Colection" to obj.getString("Colection"),
+                                "Encontrado" to obj.getBoolean("Encontrado"),
+                                "Local" to obj.getString("Local"),
+                                "imagem" to obj.getString("imagem")
+                            )
+                            objts.add(objPerdidoMap)
+                        }
+                        Log.d("OBJPERDIDO", "nomeobj: ${obj.getString("NomeObj")}")
+                    }
+                }
+                onResult(objts)
+            } else {
+                Log.d("GET", "O GET em Perdidos falhou")
+                onResult(emptyList())
             }
         }
-    return objts
 }
 
-// Função para obter objetos encontrados do Firestore
 private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
     val db = FirebaseFirestore.getInstance()
     val objts = ArrayList<Map<String, Any?>>()
@@ -293,21 +336,24 @@ private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
                 val result = task.result
                 if (result != null) {
                     for (obj in result) {
-                        val objPerdidoMap = hashMapOf(
-                            "NomeObj" to obj.getString("NomeObj"),
-                            "Tag" to obj.getString("Tag"),
-                            "Descricao" to obj.getString("Descricao"),
-                            "Data" to obj.getString("Data"),
-                            "id" to obj.getString("id"),
-                            "Mensagem" to obj.getString("Mensagem"),
-                            "ContatoCelular" to obj.getString("Celular"),
-                            "ContatoEmail" to obj.getString("Email"),
-                            "Colection" to obj.getString("Colection"),
-                            "Encontrado" to obj.getBoolean("Encontrado"),
-                            "imagem" to obj.getString("imagem")
-                        )
-                        objts.add(objPerdidoMap)
-                        Log.d("OBJPERDIDO", "nomeobj: ${obj.getString("NomeObj")}")
+                        if (obj.getBoolean("Encontrado") != true) {
+                            val objPerdidoMap = hashMapOf(
+                                "NomeObj" to obj.getString("NomeObj"),
+                                "Tag" to obj.getString("Tag"),
+                                "Descricao" to obj.getString("Descricao"),
+                                "Data" to obj.getString("Data"),
+                                "id" to obj.getString("id"),
+                                "Mensagem" to obj.getString("Mensagem"),
+                                "ContatoCelular" to obj.getString("Celular"),
+                                "ContatoEmail" to obj.getString("Email"),
+                                "Colection" to obj.getString("Colection"),
+                                "Encontrado" to obj.getBoolean("Encontrado"),
+                                "Local" to obj.getString("Local"),
+                                "imagem" to obj.getString("imagem")
+                            )
+                            objts.add(objPerdidoMap)
+                            Log.d("OBJENCONTRADO", "nomeobj: ${obj.getString("NomeObj")}")
+                        }
                     }
                 }
                 onResult(objts)
@@ -361,9 +407,9 @@ fun DeleteObjEncontrado(id: String){
     }
 }
 
-fun UpdateObjStatus(id: String, Encontrado: Boolean){
+fun UpdateObjStatus(id: String, Encontrado: Boolean, Collection: String){
     val db = FirebaseFirestore.getInstance()
-    db.collection("Perdidos").document(id).update("Encontrado", Encontrado).addOnCompleteListener {
+    db.collection(Collection).document(id).update("Encontrado", Encontrado).addOnCompleteListener {
         Log.d("UPDATE", "O UPDATE em Perdidos foi bem sucedido")
     }.addOnFailureListener{
         Log.d("UPDATE", "O UPDATE em Perdidos falhou")
@@ -376,22 +422,30 @@ fun NavGraph(navController: NavHostController) {
         composable("onboarding") {
             OnboardingScreen(navController)
         }
-        composable("home") {
-            App(navController)
+        composable(
+            route = "home/{tab}",
+            arguments = listOf(navArgument("tab") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val tab = backStackEntry.arguments?.getInt("tab") ?: 0
+            App(navController, tab = tab)
         }
-        composable("details/{item}") { backStackEntry ->
+        composable("details/{item}/{tab}") { backStackEntry ->
             val item = backStackEntry.arguments?.getString("item")
-            Details(item = item ?: "", navController)
+            val tabString = backStackEntry.arguments?.getString("tab")
+            val tab = tabString?.toIntOrNull() ?: 0
+            Details(item = item ?: "", navController = navController, tab = tab, imgCollectionId = "/images/1000097143")
         }
-        composable("cadastro-item-encontrado") {
-            CadastroObjetosEncontrados(navController = navController)
+        composable("cadastro-item/{tab}") { backStackEntry ->
+            val tabString = backStackEntry.arguments?.getString("tab")
+            val tab = tabString?.toIntOrNull() ?: 0
+            CadastroObjetos(navController = navController, tab)
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun OnboardingScreen(navController: NavHostController) {
+fun OnboardingScreen(navController: NavHostController, tab: Int = 0) {
     val scope = rememberCoroutineScope()
     val images = listOf(
         R.drawable.tip_image_1,
@@ -404,9 +458,9 @@ fun OnboardingScreen(navController: NavHostController) {
         "Vem fazer parte dessa corrente do bem!",
     )
     val descriptions = listOf(
-        "Dentro do app você pode cadastrar e procurar seus pertences perdidos!",
-        "Dentro do app você pode cadastrar objetos encontrados dentro do campus!",
-        "Dentro do app você pode cadastrar objetos encontrados!"
+        "Dentro do app você pode cadastrar seus pertences perdidos para que outras pessoas possam ajudá-lo a encontrá-lo!",
+        "Dentro do app você pode cadastrar objetos encontrados dentro do campus para o dono entrar em contato e você poder devolvê-lo!",
+        ""
     )
 
     val backgrounds = listOf(
@@ -465,7 +519,7 @@ fun OnboardingScreen(navController: NavHostController) {
                 } else {
                     Button(
                         onClick = {
-                            navController.navigate("home")
+                            navController.navigate("home/$tab")
                         },
                         colors = ButtonDefaults.buttonColors(Color(0xFF049EFE)),
                     ) {
@@ -488,7 +542,7 @@ fun OnboardingPage(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        // Imagem de background
+
         Image(
             painter = painterResource(id = backgroundRes),
             contentDescription = null,
@@ -496,7 +550,6 @@ fun OnboardingPage(
             contentScale = ContentScale.Crop
         )
 
-        // Conteúdo sobreposto
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -534,22 +587,61 @@ fun OnboardingPage(
 }
 
 @Composable
-fun App(navController: NavHostController) {
+fun App(navController: NavHostController, tab: Int) {
+    var selectedTab by remember { mutableStateOf(tab) }
+    val tabs = listOf("Encontrados", "Perdidos")
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0XFFFFFF)),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            SectionHeaderUser(text = "Achei e perdi")
-            Spacer(modifier = Modifier.height(16.dp))
-            InstructionHeader(navController = navController)
-            Spacer(modifier = Modifier.height(16.dp))
-            FiltrosSection()
-            Spacer(modifier = Modifier.height(16.dp))
-            RecentsSection(navController = navController)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        SectionHeaderUser(text = "Achei e perdi")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        InstructionHeader(navController = navController, 0)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        RecentsSection(navController = navController, 0)
+                    }
+                    1 -> {
+                        SectionHeaderUser(text = "Achei e perdi")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        InstructionHeader(navController = navController, 1)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        RecentsSection(navController = navController, 1)
+                    }
+                }
+            }
+
+            TabRow(
+                selectedTabIndex = selectedTab,
+                contentColor = Color.Black,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .background(Color.White)
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = {
+                            selectedTab = index
+                            val tab = index.toString()
+                            navController.navigate("home/$tab")
+                        },
+                        text = { Text(title) }
+                    )
+                }
+            }
         }
     }
 }
@@ -558,7 +650,8 @@ fun App(navController: NavHostController) {
 fun CustomIconButton(
     colorBackground: Color,
     colorIcon: Color,
-    navController: NavController
+    navController: NavController,
+    tab: Int
 ) {
     Box(
         modifier = Modifier
@@ -568,7 +661,7 @@ fun CustomIconButton(
     ) {
         IconButton(
             onClick = {
-                navController.navigate("home")
+                navController.navigate("home/$tab")
             }
         ) {
             Icon(
@@ -581,23 +674,30 @@ fun CustomIconButton(
 }
 
 @Composable
-fun Details(item: String, navController: NavHostController) {
+fun Details(item: String, navController: NavHostController, tab: Int, imgCollectionId: String = "/images/1000097143") {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var objeto by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
-    // Verifique se o LaunchedEffect está sendo executado
+    val collection = if (tab == 0) "Encontrados" else "Perdidos"
     LaunchedEffect(item) {
-        objeto = GetObj(item, "Encontrados")
-        Log.d("OBJ2", objeto.toString())
+        objeto = GetObj(item, collection)
+        Log.d("OBJETO", objeto.toString())
         isLoading = false
     }
+    ImagePickerAndUploader(collection = if (tab == 0) "Encontrados" else "Perdidos")
 
     if (isLoading) {
-        // Exibe uma tela de carregamento
-        CircularProgressIndicator(modifier = Modifier.fillMaxSize())
+        Column(
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+        ) {
+            CircularProgressIndicator()
+        }
     } else {
-        // Renderiza o conteúdo quando isLoading é false
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -615,20 +715,14 @@ fun Details(item: String, navController: NavHostController) {
                     CustomIconButton(
                         colorBackground = Color.White,
                         colorIcon = Color(0XFF049EFE),
-                        navController = navController
+                        navController = navController,
+                        tab = tab
                     )
                 }
             }
             item {
-                objeto?.let { obj ->
-                    Image(
-                        painter = painterResource(id = R.drawable.default_image),
-                        contentDescription = "Profile Picture",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(360.dp),
-                        contentScale = ContentScale.Crop
-                    )
+                objeto?.let {obj ->
+                    FirebaseImage(filePath = imgCollectionId, item = obj["imagem"].toString())
                 }
             }
             item {
@@ -641,14 +735,14 @@ fun Details(item: String, navController: NavHostController) {
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.weight(2f)) {
+                            Column(Modifier.weight(3f)) {
                                 Text(
-                                    text = "encontrado no:",
+                                    text = if (tab == 0) "encontrado no:" else "perdido perto do:",
                                     style = TextStyle(fontWeight = FontWeight.Bold),
                                     fontFamily = InterFontFamily
                                 )
                                 Text(
-                                    text = "CAC - centro de artes e comunicação",
+                                    text = obj["Local"] as String? ?: "Sem local definido",
                                     modifier = Modifier.fillMaxWidth(),
                                     fontFamily = InterFontFamily
                                 )
@@ -667,6 +761,11 @@ fun Details(item: String, navController: NavHostController) {
                             }
                         }
                         Spacer(modifier = Modifier.height(25.dp))
+                        Text(
+                            text = "descrição:",
+                            style = TextStyle(fontWeight = FontWeight.Bold),
+                            fontFamily = InterFontFamily
+                        )
                         Text(
                             text = obj["Descricao"] as String? ?: "DESCRIÇÃO: ...",
                             fontFamily = InterFontFamily
@@ -692,7 +791,7 @@ fun Details(item: String, navController: NavHostController) {
                                     fontFamily = InterFontFamily
                                 )
                                 Text(
-                                    text = "objeto perdido",
+                                    text = if (tab == 0) "objeto encontrado" else "objeto perdido",
                                     modifier = Modifier.fillMaxWidth(),
                                     fontFamily = InterFontFamily
                                 )
@@ -705,7 +804,7 @@ fun Details(item: String, navController: NavHostController) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Image(
-                                painter = painterResource(id = R.drawable.delivery),
+                                painter = painterResource(id = R.drawable.bonequinho),
                                 contentDescription = "Profile User",
                                 modifier = Modifier
                                     .size(64.dp)
@@ -728,7 +827,7 @@ fun Details(item: String, navController: NavHostController) {
                                 openEmailService(
                                     context = context,
                                     email = obj["ContatoEmail"] as String? ?: "example@ufpe.br",
-                                    subject = "Assunto",
+                                    subject = if (tab == 0) "Você encontrou meu objeto, obrigada!" else "Encontrei o seu objeto, como posso te devolver?",
                                     body = "Corpo da mensagem"
                                 )
                             },
@@ -744,6 +843,27 @@ fun Details(item: String, navController: NavHostController) {
                                     fontFamily = InterFontFamily
                                 )
                             )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        objeto?.let { obj ->
+                            Button(
+                                onClick = {
+                                    UpdateObjStatus(obj["id"] as String? ?: "", true, obj["Colection"] as String? ?: "Perdidos")
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                                    .border(1.dp, Color(0xFF049EFE), CircleShape),
+                                colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
+                            ) {
+                                Text(
+                                    text = "Marcar como entregue",
+                                    style = TextStyle(
+                                        color = Color(0xFF049EFE),
+                                        fontFamily = InterFontFamily
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -769,7 +889,7 @@ fun SectionHeaderUser(text: String) {
             modifier = Modifier.padding(bottom = 10.dp)
         )
         Image(
-            painter = painterResource(id = R.drawable.delivery),
+            painter = painterResource(id = R.drawable.bonequinho),
             contentDescription = "Profile User",
             modifier = Modifier
                 .size(64.dp)
@@ -793,7 +913,7 @@ fun SectionHeader(text: String) {
 }
 
 @Composable
-fun InstructionHeader(navController: NavHostController) {
+fun InstructionHeader(navController: NavHostController, tab: Int) {
     Card(
         modifier = Modifier
             .fillMaxWidth(),
@@ -806,7 +926,7 @@ fun InstructionHeader(navController: NavHostController) {
                 .height(100.dp),
         ) {
             Text(
-                text = "Encontrei um objeto perdido pela UFPE e desejo entregar para o dono!",
+                text = if (tab==0) "Encontrei um objeto perdido pela UFPE e desejo entregar para o dono!" else "Perdi um objeto pela UFPE e desejo cadastrá-lo para as pessoas me ajudarem a encontrá-lo!",
                 style = TextStyle(
                     fontWeight = FontWeight.Bold,
                     color = Color(0XFFFFFFFF)
@@ -815,7 +935,9 @@ fun InstructionHeader(navController: NavHostController) {
                 fontFamily = InterFontFamily
             )
             Button(
-                onClick = {navController.navigate("cadastro-item-encontrado")},
+                onClick = {
+                    navController.navigate("cadastro-item/$tab")
+                },
                 modifier = Modifier.align(Alignment.End),
                 colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
             ) {
@@ -906,24 +1028,40 @@ fun CategoryCard(imgCard: Int, category: String) {
 }
 
 @Composable
-fun RecentsSection(navController: NavHostController) {
-    // Estado para armazenar os itens encontrados
+fun RecentsSection(navController: NavHostController, tab: Int) {
     val items = remember { mutableStateOf(emptyList<Map<String, Any?>>()) }
     val isLoading = remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        GetObjEncontrados { result ->
-            items.value = result
-            isLoading.value = false
+        if (tab == 0) {
+            GetObjEncontrados { result ->
+                Log.d("OBJENCONTRADO", result.toString())
+                items.value = result
+                isLoading.value = false
+            }
+        } else {
+            GetObjPerdidos { result ->
+                Log.d("OBJPERDIDO", result.toString())
+                items.value = result
+                isLoading.value = false
+            }
         }
     }
 
     Column {
-        SectionHeader(text = "Objetos encontrados mais recentes")
+        SectionHeader(text = if (tab==0) "Objetos encontrados mais recentes" else "Objetos perdidos mais recentes")
         Spacer(modifier = Modifier.height(16.dp))
 
         if (isLoading.value) {
-            CircularProgressIndicator()
+            Column(
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+            ) {
+                CircularProgressIndicator()
+            }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -934,7 +1072,8 @@ fun RecentsSection(navController: NavHostController) {
                     CardObjeto(
                         items.value[item].toString(),
                         navController,
-                        items.value[item].get("imagem").toString()
+                        items.value[item].get("imagem").toString(),
+                        tab = tab
                     )
                 }
             }
@@ -943,7 +1082,7 @@ fun RecentsSection(navController: NavHostController) {
 }
 
 @Composable
-fun CardObjeto(item: String, navController: NavHostController, imgCollectionId: String = "/images/1000097143") {
+fun CardObjeto(item: String, navController: NavHostController, imgCollectionId: String = "/images/1000097143", tab: Int) {
     Log.d("CARD", item)
     val regex_id = """id=([^,}]+)""".toRegex()
     val regex_nome = """NomeObj=([^,}]+)""".toRegex()
@@ -958,7 +1097,7 @@ fun CardObjeto(item: String, navController: NavHostController, imgCollectionId: 
             .fillMaxWidth()
             .height(200.dp),
         onClick = {
-            navController.navigate("details/$id")
+            navController.navigate("details/$id/$tab")
         },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(Color.White)
@@ -993,12 +1132,35 @@ data class CadastroForm(
     var data: String = "",
     var mensagem: String = "",
     var contatoEmail: String = "",
+    var local: String = "",
     var collection: String = ""
 )
 
 @Composable
-fun CadastroObjetosEncontrados(navController: NavHostController) {
+fun CadastroObjetos(navController: NavHostController, tab: Int) {
     val form = remember { mutableStateOf(CadastroForm()) }
+    val context = LocalContext.current
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    var locationText by remember { mutableStateOf("Localização não disponível") }
+
+    val locationPermissionGranted = remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        if (!locationPermissionGranted.value) {
+            ActivityCompat.requestPermissions(
+                context as Activity,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                1
+            )
+        }
+    }
 
     Box(modifier = Modifier
         .fillMaxSize()
@@ -1019,14 +1181,15 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                     CustomIconButton(
                         colorBackground = Color.White,
                         colorIcon = Color(0XFF049EFE),
-                        navController = navController
+                        navController = navController,
+                        tab = tab
                     )
                 }
             }
             item {
                 Column(modifier = Modifier.padding(25.dp)) {
                     Text(
-                        text = "Cadastrar objeto encontrado",
+                        text = if (tab == 0) "Cadastrar objeto encontrado" else "Cadastrar objeto perdido",
                         style = TextStyle(
                             fontFamily = InterFontFamily,
                             fontWeight = FontWeight.ExtraBold,
@@ -1034,8 +1197,8 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                         )
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    // Exibir a imagem do Firebase Storage
-                    ImagePickerAndUploader(collection = "Encontrados")
+
+                    ImagePickerAndUploader(collection = if (tab == 0) "Encontrados" else "Perdidos")
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Column {
@@ -1078,7 +1241,7 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                         OutlinedTextField(
                             value = form.value.data,
                             onValueChange = { form.value = form.value.copy(data = it) },
-                            label = { Text("Selecione a data que você encontrou o objeto") },
+                            label = { Text(if (tab == 0) "Selecione a data que você encontrou o objeto" else "Seleciona a data que você acredita ter perdido o objeto") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp)
                         )
@@ -1100,6 +1263,39 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp)
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                if (locationPermissionGranted.value) {
+                                    fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                                        location?.let {
+                                            val locationString = "Latitude: ${it.latitude}, Longitude: ${it.longitude}"
+                                            locationText = locationString
+                                            form.value = form.value.copy(local = locationString)
+                                        } ?: run {
+                                            locationText = "Localização não encontrada"
+                                        }
+                                    }
+                                } else {
+                                    locationText = "Permissão não concedida"
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .border(1.dp, Color(0xFF049EFE), CircleShape),
+                            colors = ButtonDefaults.buttonColors(Color(0XFFFFFFFF))
+                        ) {
+                            Text(
+                                text = "Pegar minha localização",
+                                style = TextStyle(
+                                    color = Color(0xFF049EFE),
+                                    fontFamily = InterFontFamily
+                                )
+                            )
+                        }
+                        Text(text = locationText)
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1107,19 +1303,35 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                     Row {
                         Button(
                             onClick = {
-                                // Chama a função RegisterObjPerdido com os valores dos inputs
-                                RegisterObjEncontrado(
-                                    NomeObj = form.value.nomeObj,
-                                    Tag = form.value.categoria,
-                                    Descricao = form.value.descricao,
-                                    Data = form.value.data,
-                                    Mensagem = form.value.mensagem,
-                                    ContatoCelular = form.value.celular,
-                                    ContatoEmail = form.value.contatoEmail,
-                                    Encontrado = false,
-                                    imagem = Global.globalVariable,
-                                    Colection = form.value.collection
-                                )
+                                if (tab == 0) {
+                                    RegisterObjEncontrado(
+                                        NomeObj = form.value.nomeObj,
+                                        Tag = form.value.categoria,
+                                        Descricao = form.value.descricao,
+                                        Data = form.value.data,
+                                        Mensagem = form.value.mensagem,
+                                        ContatoCelular = form.value.celular,
+                                        ContatoEmail = form.value.contatoEmail,
+                                        Encontrado = false,
+                                        Local = form.value.local,
+                                        imagem = Global.globalVariable,
+                                        Colection = form.value.collection
+                                    )
+                                } else {
+                                    RegisterObjPerdido(
+                                        NomeObj = form.value.nomeObj,
+                                        Tag = form.value.categoria,
+                                        Descricao = form.value.descricao,
+                                        Data = form.value.data,
+                                        Mensagem = form.value.mensagem,
+                                        ContatoCelular = form.value.celular,
+                                        ContatoEmail = form.value.contatoEmail,
+                                        Encontrado = false,
+                                        Local = form.value.local,
+                                        imagem = Global.globalVariable,
+                                        Colection = form.value.collection
+                                    )
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1127,7 +1339,7 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                             colors = ButtonDefaults.buttonColors(Color(0xFF049EFE))
                         ) {
                             Text(
-                                text = "Cadastrar objeto encontrado",
+                                text = if (tab == 0) "Cadastrar objeto encontrado" else "Cadastrar objeto perdido",
                                 style = TextStyle(
                                     color = Color(0XFFFFFFFF),
                                     fontFamily = InterFontFamily
@@ -1165,7 +1377,6 @@ fun FirebaseImage(filePath: String, item: String) {
     }
 
     if (isLoading) {
-        // Exibir um CircularProgressIndicator enquanto a URL é carregada
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(128.dp)
@@ -1173,7 +1384,6 @@ fun FirebaseImage(filePath: String, item: String) {
             CircularProgressIndicator()
         }
     } else if (error != null) {
-        // Exibir mensagem de erro se houver um problema
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(128.dp)
@@ -1181,7 +1391,6 @@ fun FirebaseImage(filePath: String, item: String) {
             Text(text = "Error: $error")
         }
     } else if (imageUrl != null) {
-        // Exibir a imagem se a URL for obtida com sucesso
         Image(
             painter = rememberAsyncImagePainter(imageUrl),
             contentDescription = item,
@@ -1211,11 +1420,10 @@ object Global {
 
 @Composable
 fun ImagePickerAndUploader(collection: String) {
-    // Variáveis para armazenar o URI da imagem e o estado do upload
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var uploadState by remember { mutableStateOf<UploadState>(UploadState.Idle) }
     var imageIdInFirebase = ""
-    // Obtém o launcher para escolher uma imagem da galeria
+
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             imageUri = it
@@ -1235,7 +1443,6 @@ fun ImagePickerAndUploader(collection: String) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Mostrar a imagem selecionada
         imageUri?.let {
             Image(painter = rememberAsyncImagePainter(it), contentDescription = null, modifier = Modifier.size(128.dp))
         }
@@ -1253,15 +1460,11 @@ sealed class UploadState {
 }
 
 fun uploadImageToFirebase(collection: String, uri: Uri, onSuccess: (String) -> Unit, onFailure: (String) -> Unit): String {
-    // Crie uma referência para o Firebase Storage
     val storageRef = Firebase.storage.reference.child("$collection/${uri.lastPathSegment}")
 
-    // Comece o upload do arquivo
     val uploadTask = storageRef.putFile(uri)
 
-    // Adicione ouvintes para sucesso e falha do upload
     uploadTask.addOnSuccessListener {
-        // Obtenha a URL de download após o upload
         storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
             onSuccess(downloadUri.toString())
         }.addOnFailureListener { exception ->

@@ -78,4 +78,8 @@ dependencies {
     implementation ("androidx.activity:activity-ktx:1.8.0")
     implementation ("androidx.compose.ui:ui:1.4.0")
     implementation ("com.google.firebase:firebase-storage:20.2.0")
+    implementation("com.google.android.gms:play-services-maps:18.0.1")
+    implementation("com.google.android.libraries.places:places:3.1.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 }
