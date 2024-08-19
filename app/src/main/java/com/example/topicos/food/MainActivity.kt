@@ -1,12 +1,27 @@
 package com.example.topicos.food
 
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.ktx.storage
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -128,15 +143,22 @@ fun generateRandomString(): String {
         .map { chars.random() }
         .joinToString("")
 }
+fun generateRandomIdToImage(): String {
+    val chars = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+    return (1..64)
+        .map { chars.random() }
+        .joinToString("")
+}
 
-fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: String){
+fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: String, Data: String, imagem: String){
     val db = FirebaseFirestore.getInstance()
     val userMap = hashMapOf(
         "Nome" to NomeCompleto,
         "Email" to Email,
         "Celular" to Celular,
         "CPF" to Cpf,
-        "DataCriacao" to Data
+        "DataCriacao" to Data,
+        "imagem" to imagem
     )
     db.collection("users").document(Cpf)
         .set(userMap).addOnCompleteListener {
@@ -147,7 +169,7 @@ fun RegisterUser(NomeCompleto: String, Email: String, Celular: String, Cpf: Stri
 }
 
 fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: String,
-                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+                       Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean, imagem: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -160,7 +182,8 @@ fun RegisterObjPerdido(NomeObj: String, Tag: String, Descricao: String, Data: St
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
         "Encontrado" to Encontrado,
-        "Colection" to "Perdidos"
+        "Colection" to "Perdidos",
+        "imagem" to imagem
 
     )
     db.collection("Perdidos").document(id)
@@ -201,7 +224,7 @@ suspend fun GetObj(id: String, collection: String): Map<String, Any?>? {
 
 fun RegisterObjEncontrado(
     NomeObj: String, Tag: String, Descricao: String, Data: String,
-    Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean){
+    Mensagem: String, ContatoCelular: String, ContatoEmail:String, Encontrado: Boolean, imagem: String, Colection: String){
     val db = FirebaseFirestore.getInstance()
     val id = generateRandomString()
     val ObjMap = hashMapOf(
@@ -213,8 +236,9 @@ fun RegisterObjEncontrado(
         "Mensagem" to Mensagem,
         "Celular" to ContatoCelular,
         "Email" to ContatoEmail,
-        "Colection" to "Encontrados",
-        "Encontrado" to Encontrado
+        "Colection" to Colection,
+        "Encontrado" to Encontrado,
+        "imagem" to imagem
     )
     db.collection("Encontrados").document(id)
         .set(ObjMap).addOnCompleteListener {
@@ -247,6 +271,7 @@ fun GetObjPerdidos(): ArrayList<Any> {
                     "ContatoEmail" to obj.getString("Email"),
                     "Colection" to obj.getString("Colection"),
                     "Encontrado" to obj.getBoolean("Encontrado"),
+                    "imagem" to obj.getString("imagem")
                 )
                 objts.add(objPerdidoMap)
                 Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
@@ -279,6 +304,7 @@ private fun GetObjEncontrados(onResult: (List<Map<String, Any?>>) -> Unit) {
                             "ContatoEmail" to obj.getString("Email"),
                             "Colection" to obj.getString("Colection"),
                             "Encontrado" to obj.getBoolean("Encontrado"),
+                            "imagem" to obj.getString("imagem")
                         )
                         objts.add(objPerdidoMap)
                         Log.d("OBJPERDIDO", "nomeobj: ${obj.getString("NomeObj")}")
@@ -307,7 +333,8 @@ fun GetUsers(): ArrayList<Any> {
                     "Email" to obj.getString("Email"),
                     "Celular" to obj.getString("Celular"),
                     "CPF" to obj.getString("Cpf"),
-                    "DataCriacao" to obj.getString("Data")
+                    "DataCriacao" to obj.getString("Data"),
+                    "imagem" to obj.getString("imagem")
                 )
                 objts.add(objPerdidoMap)
                 Log.d("OBJPERDIDO", "nomeobj: $obj.getString('NomeObj')")
@@ -906,7 +933,8 @@ fun RecentsSection(navController: NavHostController) {
                 items(items.value.size) { item ->
                     CardObjeto(
                         items.value[item].toString(),
-                        navController
+                        navController,
+                        items.value[item].get("imagem").toString()
                     )
                 }
             }
@@ -915,15 +943,16 @@ fun RecentsSection(navController: NavHostController) {
 }
 
 @Composable
-fun CardObjeto(item: String, navController: NavHostController) {
+fun CardObjeto(item: String, navController: NavHostController, imgCollectionId: String = "/images/1000097143") {
     Log.d("CARD", item)
     val regex_id = """id=([^,}]+)""".toRegex()
     val regex_nome = """NomeObj=([^,}]+)""".toRegex()
     val regex_descricao = """Descricao=([^,}]+)""".toRegex()
+    //val regex_imagem = """imagem=([^,}]+)""".toRegex()
     val id = regex_id.find(item)?.groups?.get(1)?.value ?: "Id não disponível"
     val nomeObj = regex_nome.find(item)?.groups?.get(1)?.value ?: "Nome não disponível"
     val descricao = regex_descricao.find(item)?.groups?.get(1)?.value ?: "Descricao não disponível"
-
+    val imagem = imgCollectionId
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -937,15 +966,7 @@ fun CardObjeto(item: String, navController: NavHostController) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.default_image),
-                contentDescription = item,
-                modifier = Modifier
-                    .height(100.dp)
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.medium),
-                contentScale = ContentScale.Crop
-            )
+            FirebaseImage(filePath = imagem, item = item)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = nomeObj,
@@ -972,6 +993,7 @@ data class CadastroForm(
     var data: String = "",
     var mensagem: String = "",
     var contatoEmail: String = "",
+    var collection: String = ""
 )
 
 @Composable
@@ -1012,14 +1034,8 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                         )
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.default_image),
-                        contentDescription = "Cadastro do objeto encontrado",
-                        modifier = Modifier
-                            .height(200.dp)
-                            .fillMaxWidth(),
-                        contentScale = ContentScale.Crop
-                    )
+                    // Exibir a imagem do Firebase Storage
+                    ImagePickerAndUploader(collection = "Encontrados")
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Column {
@@ -1100,7 +1116,9 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
                                     Mensagem = form.value.mensagem,
                                     ContatoCelular = form.value.celular,
                                     ContatoEmail = form.value.contatoEmail,
-                                    Encontrado = false
+                                    Encontrado = false,
+                                    imagem = Global.globalVariable,
+                                    Colection = form.value.collection
                                 )
                             },
                             modifier = Modifier
@@ -1121,4 +1139,136 @@ fun CadastroObjetosEncontrados(navController: NavHostController) {
             }
         }
     }
+}
+
+@Composable
+fun FirebaseImage(filePath: String, item: String) {
+    var imageUrl by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(filePath) {
+        try {
+            getImageUrl(filePath,
+                onSuccess = { url ->
+                    imageUrl = url
+                    isLoading = false
+                },
+                onFailure = { ex ->
+                    error = ex.message
+                    isLoading = false
+                }
+            )
+        }catch (e: Exception) {
+            error = e.message
+        }
+    }
+
+    if (isLoading) {
+        // Exibir um CircularProgressIndicator enquanto a URL é carregada
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(128.dp)
+        ) {
+            CircularProgressIndicator()
+        }
+    } else if (error != null) {
+        // Exibir mensagem de erro se houver um problema
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(128.dp)
+        ) {
+            Text(text = "Error: $error")
+        }
+    } else if (imageUrl != null) {
+        // Exibir a imagem se a URL for obtida com sucesso
+        Image(
+            painter = rememberAsyncImagePainter(imageUrl),
+            contentDescription = item,
+            modifier = Modifier
+                .height(100.dp)
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium),
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+fun getImageUrl(filePath: String, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
+    val storageRef = Firebase.storage.reference.child(filePath)
+
+    storageRef.downloadUrl
+        .addOnSuccessListener { uri ->
+            onSuccess(uri.toString())
+        }
+        .addOnFailureListener { exception ->
+            onFailure(exception)
+        }
+}
+object Global {
+    var globalVariable: String = ""
+}
+
+@Composable
+fun ImagePickerAndUploader(collection: String) {
+    // Variáveis para armazenar o URI da imagem e o estado do upload
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var uploadState by remember { mutableStateOf<UploadState>(UploadState.Idle) }
+    var imageIdInFirebase = ""
+    // Obtém o launcher para escolher uma imagem da galeria
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            imageUri = it
+            Global.globalVariable = uploadImageToFirebase(collection, it, onSuccess = {
+                Log.d("UPLOAD", "Upload realizado com sucesso, $imageIdInFirebase")
+                uploadState = UploadState.Success(it)
+            }, onFailure = {
+                uploadState = UploadState.Failure(it)
+            })
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Button(onClick = { imagePickerLauncher.launch("image/*") }) {
+            Text("Escolher Imagem")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Mostrar a imagem selecionada
+        imageUri?.let {
+            Image(painter = rememberAsyncImagePainter(it), contentDescription = null, modifier = Modifier.size(128.dp))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+    }
+}
+
+sealed class UploadState {
+    object Idle : UploadState()
+    object Loading : UploadState()
+    data class Success(val downloadUrl: String) : UploadState()
+    data class Failure(val error: String) : UploadState()
+}
+
+fun uploadImageToFirebase(collection: String, uri: Uri, onSuccess: (String) -> Unit, onFailure: (String) -> Unit): String {
+    // Crie uma referência para o Firebase Storage
+    val storageRef = Firebase.storage.reference.child("$collection/${uri.lastPathSegment}")
+
+    // Comece o upload do arquivo
+    val uploadTask = storageRef.putFile(uri)
+
+    // Adicione ouvintes para sucesso e falha do upload
+    uploadTask.addOnSuccessListener {
+        // Obtenha a URL de download após o upload
+        storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
+            onSuccess(downloadUri.toString())
+        }.addOnFailureListener { exception ->
+            onFailure(exception.message ?: "Unknown error")
+        }
+    }.addOnFailureListener { exception ->
+        onFailure(exception.message ?: "Unknown error")
+    }
+    return "$collection/${uri.lastPathSegment}"
 }
