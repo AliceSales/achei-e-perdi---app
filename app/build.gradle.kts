@@ -73,4 +73,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation ("com.google.firebase:firebase-firestore:24.4.1") // Versão atual
 //    implementation("com.google.android.gms:play-services-auth:20.4.0")
+    implementation("com.google.android.gms:play-services-maps:18.0.1")
+    implementation("com.google.android.libraries.places:places:3.1.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 }
